@@ -391,3 +391,9 @@ def scatter_(inp, dim, index, src, reduce=None):
     )
 
     return inp
+
+def scatter_backward(grad, self, dim, index):
+    from .gather import gather
+    logging.debug("GEMS SCATTER BACKWARD")
+    result = grad.new_zeros(self.shape)
+    return gather(grad, dim, index, result)

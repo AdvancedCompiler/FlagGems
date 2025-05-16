@@ -467,7 +467,7 @@ def test_accuracy_varmean(shape, dim, correction, keepdim, dtype):
 @pytest.mark.parametrize("dim", [0, 1, 2])
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_accuracy_scatter_src(src_shape, inp_shape, dim, dtype):
-    inp = torch.randn(inp_shape, dtype=dtype, device=flag_gems.device)
+    inp = torch.randn(inp_shape, dtype=dtype, device=flag_gems.device, requires_grad=True)
     src = torch.randn(src_shape, dtype=dtype, device=flag_gems.device)
     size_dim = min(src_shape[dim], inp_shape[dim])
 
@@ -499,6 +499,15 @@ def test_accuracy_scatter_src(src_shape, inp_shape, dim, dtype):
         res_out = torch.scatter(inp, dim, index, src)
 
     gems_assert_equal(res_out, ref_out)
+
+    out_grad = torch.randn_like(res_out)
+    ref_grad = to_reference(out_grad)
+    (ref_in_grad,) = torch.autograd.grad(ref_out, ref_inp, ref_grad)
+    with flag_gems.use_gems():
+        #pdb.set_trace()
+        (res_in_grad,) = torch.autograd.grad(res_out, inp, out_grad)
+    res_in_grad = to_reference(res_in_grad)
+    gems_assert_equal(res_in_grad, ref_in_grad)
 
 
 @pytest.mark.scatter

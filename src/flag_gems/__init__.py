@@ -255,6 +255,7 @@ def enable(
             ("nll_loss2d_forward", nll_loss2d_forward, Autograd.disable),
             ("nll_loss2d_backward", nll_loss2d_backward, Autograd.disable),
             ("scatter.src", scatter, Autograd.disable),
+            ("scatter_backward", scatter_backward, Autograd.disable),
             ("scatter.reduce", scatter, Autograd.disable),
             ("gather", gather, Autograd.disable),
             ("gather_backward", gather_backward, Autograd.disable),
