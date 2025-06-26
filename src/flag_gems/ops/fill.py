@@ -3,7 +3,7 @@ import logging
 import torch
 import triton
 import triton.language as tl
-
+import triton_fill_ext  # 导入你绑定的 C++ 扩展模块
 from ..runtime import torch_device_fn
 from ..utils import libentry
 from ..utils import triton_lang_extension as tle
@@ -59,7 +59,12 @@ def fill_tensor(input, value):
 
 
 def fill_scalar(input, value):
-    logger.debug("GEMS FILL")
+    logger.debug("GEMS FILL (C++ WRAPPER + Triton)")
+    
+    # ✅ 调用你 C++ 模块，哪怕只是打个日志
+    triton_fill_ext.fill_cuda(input, value)
+    
+    # 原始 Triton kernel
     out = torch.empty_like(input)
     N = out.numel()
     BLOCK_SIZE = 512

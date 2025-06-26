@@ -52,31 +52,30 @@ using namespace triton_jit;
 at::Tensor sum_dim(const at::Tensor &self,
                    at::OptionalIntArrayRef dim,
                    bool keepdim,
-                   ::std::optional<at::ScalarType> dtype) {
+                   std::optional<at::ScalarType> dtype) {
+  // 处理维度参数，保证合法且范围内
   at::DimVector dims_ = at::native::make_dim_vector(dim, self.dim());
   at::maybe_wrap_dims(dims_, self.dim());
-  at::DimVector shape = at::meta::get_reduction_shape(self, dims_, keepdim, false);
-  c10::ScalarType out_dtype = at::native::get_dtype_from_self(self, dtype, true);
-  at::Tensor out = at::empty(shape, self.options());
 
+  // 获取输出形状，三参数调用
+  at::DimVector shape = at::meta::get_reduction_shape(self, dims_, keepdim);
+
+  // std::optional -> c10::optional 转换
+  c10::optional<at::ScalarType> dtype_opt = dtype.has_value() ? c10::optional<at::ScalarType>(dtype.value()) : c10::nullopt;
+
+  // 获取输出数据类型
+  c10::ScalarType out_dtype = at::native::get_dtype_from_self(self, dtype_opt, true);
+
+  // 创建输出张量，注意输出类型需要转换
+  at::Tensor out = at::empty(shape, self.options().dtype(out_dtype));
+
+  // 重排维度，减少维度混乱
   auto [permuted_self, non_reduction_size, reduction_size] = permute_reduction_axes_right(self, dims_);
   permuted_self = permuted_self.contiguous();
 
-  /* signature to remind yourself
-  def sum_kernel(
-    in_ptr,
-    out_ptr,
-    M,
-    N,
-    BLOCK_M: tl.constexpr,
-    BLOCK_N: tl.constexpr,
-    STAGE: tl.constexpr,
-  ):
-  */
   const TritonJITFunction &f =
       TritonJITFunction::getInstance(std::string(utils::get_triton_src_path() / "sum.py"), "sum_kernel");
 
-  // add utility to build this automatically
   int64_t tile_m = 4;
   int64_t tile_n = 512;
   const int num_warps = 8;
@@ -85,7 +84,7 @@ at::Tensor sum_dim(const at::Tensor &self,
 
   c10::DeviceGuard guard(out.device());
   c10::cuda::CUDAStream stream = c10::cuda::getCurrentCUDAStream();
-  CUstream raw_stream = static_cast<CUstream>(stream.stream());
+
   f(stream,
     num_blocks,
     1,
@@ -99,7 +98,9 @@ at::Tensor sum_dim(const at::Tensor &self,
     tile_m,
     tile_n,
     num_stages);
+
   return out;
 }
+
 
 }  // namespace flag_gems
