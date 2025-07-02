@@ -1,5 +1,6 @@
 #pragma once
 #include <optional>
+#include <tuple>
 #include "torch/torch.h"
 
 namespace flag_gems {
@@ -11,6 +12,7 @@ at::Tensor sum_dim(const at::Tensor &self,
                    ::std::optional<at::ScalarType> dtype = ::std::nullopt);
 
 at::Tensor rms_norm(const at::Tensor &input, const at::Tensor &weight, double epsilon = 1e-5);
+std::tuple<at::Tensor, at::Tensor> topk(const at::Tensor &x,  int64_t k, int64_t dim = -1, bool largest = true, bool sorted = true);
 void fused_add_rms_norm(at::Tensor &input,
                         at::Tensor &residual,
                         const at::Tensor &weight,
