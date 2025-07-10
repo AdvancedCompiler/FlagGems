@@ -32,4 +32,8 @@ std::tuple<at::Tensor, at::Tensor> rotary_embedding(
     bool rotary_interleaved = false);
 
 at::Tensor bmm(const at::Tensor &A, const at::Tensor &B);
+at::Tensor argmax(const at::Tensor &self,
+                  at::OptionalIntArrayRef dim = c10::nullopt,
+                  bool keepdim = false,
+                  ::std::optional<at::ScalarType> dtype = c10::nullopt);
 }  // namespace flag_gems
