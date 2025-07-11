@@ -33,4 +33,13 @@ std::tuple<at::Tensor, at::Tensor> rotary_embedding(
 
 at::Tensor cat(const at::TensorList &tensors, int64_t dim = 0);
 at::Tensor bmm(const at::Tensor &A, const at::Tensor &B);
+at::Tensor true_div(const at::Tensor &a, const at::Tensor &b);
+at::Tensor trunc_div(const at::Tensor &a, const at::Tensor &b);
+at::Tensor floor_div(const at::Tensor &a, const at::Tensor &b);
+at::Tensor div_mode(const at::Tensor &a, const at::Tensor &b, const std::string &rounding_mode = "");
+// --- Remainder (modulo) ops ---
+at::Tensor remainder_tt(const at::Tensor &a, const at::Tensor &b);  // Tensor % Tensor
+at::Tensor remainder_ts(const at::Tensor &a, double b_scalar);      // Tensor % Scalar
+at::Tensor remainder_st(double a_scalar, const at::Tensor &b);      // Scalar % Tensor
+at::Tensor remainder(const at::Tensor &a, const at::Tensor &b);
 }  // namespace flag_gems
