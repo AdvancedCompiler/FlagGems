@@ -505,6 +505,12 @@ def flash_attn_varlen_func(
     block_table=None,
     return_softmax_lse=False,
     out=None,
+    # Dummy FA3 arguments
+    scheduler_metadata=None,
+    q_descale=None,
+    k_descale=None,
+    v_descale=None,
+    num_splits: int = 0,
     fa_version: int = 2,
 ):
     """dropout_p should be set to 0.0 during evaluation
@@ -581,9 +587,18 @@ def flash_attn_varlen_func(
 
     dummy_cu_seqlens_k = torch.empty_like(cu_seqlens_q)
 
-    assert fa_version == 2, "Only FA2 is implemented."
+    if fa_version != 2:
+        raise RuntimeError("Only FA2 is implemented.")
 
-    out = torch.empty_like(q)
+    if num_splits > 0:
+        raise RuntimeError("num_splits > 0 is not implemented in GEMS.")
+
+    max_seqlen_q = (
+        max_seqlen_q.item() if hasattr(max_seqlen_q, "item") else max_seqlen_q
+    )
+    max_seqlen_k = (
+        max_seqlen_k.item() if hasattr(max_seqlen_k, "item") else max_seqlen_k
+    )
 
     out, q, k, v, softmax_lse, *_ = mha_varlan_fwd(
         q,

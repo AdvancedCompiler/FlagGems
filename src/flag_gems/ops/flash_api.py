@@ -5,6 +5,7 @@ import torch
 import triton
 
 import flag_gems
+from flag_gems import runtime
 from flag_gems.ops.flash_kernel import (
     block_m_splitkv_heuristic,
     block_n_splitkv_heuristic,
@@ -324,6 +325,7 @@ def mha_varlan_fwd(
     )
     q_groups = num_heads // num_heads_k
     if seqlenq_ngroups_swapped:
+        logger.debug("Swapping query groups and sequence dimensions")
         q = (
             q.reshape((batch_size, num_heads_k, q_groups, head_size))
             .transpose(1, 2)
@@ -515,11 +517,25 @@ def mha_varlan_fwd(
         kernel = flash_varlen_fwd_kernel[grid]
         args = tuple(getattr(params, k) for k in params.__slots__)
 
-        # We have to forego parameter autotuning and particularly fix BLOCK_N
-        # to avoid breaking a kv block onto multiple cache pages.
-        BLOCK_M, BLOCK_N = 128, 32
-        assert block_size % BLOCK_N == 0, f"block_size must be divisible by {BLOCK_N}."
-        kernel(*args, BLOCK_M=BLOCK_M, BLOCK_N=BLOCK_N, num_warps=4, num_stages=3)
+        # We assess which phase the requests are likely to be in and set the config accordingly.
+        #   prefill_config: BLOCK_M=128, BLOCK_N=32, num_warps=4, num_stages=3
+        #   decode_config: BLOCK_M=32, BLOCK_N=32, num_warps=4, num_stages=3
+        avg_seqlen_q = total_q / batch_size
+        if avg_seqlen_q >= 256:
+            varlen_fwd_config_str = "mha_varlen_prefill"
+        else:
+            varlen_fwd_config_str = "mha_varlen_decode"
+        cfg = runtime.get_heuristic_config(varlen_fwd_config_str)
+        cfg_params = {
+            "BLOCK_M": cfg["BLOCK_M"](args),
+            "BLOCK_N": cfg["BLOCK_N"](args),
+            "num_warps": cfg["num_warps"](args),
+            "num_stages": cfg["num_stages"](args),
+        }
+
+        logger.debug("Average query sequence length: %d", avg_seqlen_q)
+        logger.debug("Running flash_varlen_fwd_kernel with config: %s", cfg_params)
+        kernel(*args, **cfg_params)
 
         if seqlenq_ngroups_swapped:
             out = out.reshape(
@@ -856,6 +872,11 @@ def mha_fwd(
             0,  # block_size,
         )
 
+        # Move TxD to last dims for correct stride in Triton tt.load
+        if flag_gems.vendor_name == "iluvatar":
+            params.q_ptr = q.transpose(1, 2)
+            params.k_ptr = k.transpose(1, 2)
+            params.v_ptr = v.transpose(1, 2)
         kernel = dispatch(batch_size, num_heads, seqlen_q, seqlen_k, head_size, params)
 
         if _debug:

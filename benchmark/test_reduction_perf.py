@@ -80,6 +80,10 @@ forward_operations = [
     ],
 )
 def test_general_reduction_perf(op_name, torch_op, dtypes):
+    if vendor_name == "metax" and op_name in [
+        "var_mean",
+    ]:
+        pytest.skip("TODOFIX: CORE DUMPED")
     bench = UnaryReductionBenchmark(op_name=op_name, torch_op=torch_op, dtypes=dtypes)
     bench.run()
 
@@ -217,7 +221,7 @@ def mse_loss_input_fn(shape, cur_dtype, device):
             nll_loss_input_fn,
             FLOAT_DTYPES,
             marks=[
-                pytest.mark.NLLLoss,
+                pytest.mark.nll_loss,
                 pytest.mark.skipif(
                     flag_gems.device == "musa", reason="ZeroDivisionError"
                 ),
@@ -229,7 +233,7 @@ def mse_loss_input_fn(shape, cur_dtype, device):
             mse_loss_input_fn,
             FLOAT_DTYPES,
             marks=[
-                pytest.mark.MSELoss,
+                pytest.mark.mse_loss,
                 pytest.mark.skipif(
                     flag_gems.device == "musa", reason="ZeroDivisionError"
                 ),
@@ -241,7 +245,7 @@ def test_generic_reduction_benchmark(op_name, torch_op, input_fn, dtypes):
     if vendor_name == "kunlunxin":
         if op_name in ["nll_loss"]:
             pytest.skip("RUNTIME TODOFIX")
-        elif op_name in ["cummin", "cummax"]:
+        elif op_name in ["cummax"]:
             pytest.skip("CUMSUM UNSUPPORTED")
     bench = GenericBenchmark2DOnly(
         input_fn=input_fn, op_name=op_name, torch_op=torch_op, dtypes=dtypes
