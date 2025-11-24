@@ -20,6 +20,7 @@ from flag_gems.ops.attention import (
     scaled_dot_product_attention,
     scaled_dot_product_attention_backward,
 )
+from flag_gems.ops.avg_pool2d import avg_pool2d, avg_pool2d_backward
 from flag_gems.ops.batch_norm import batch_norm, batch_norm_backward
 from flag_gems.ops.bitwise_and import (
     bitwise_and_scalar,
@@ -193,10 +194,11 @@ from flag_gems.ops.stack import stack
 from flag_gems.ops.std import std
 from flag_gems.ops.sub import sub, sub_
 from flag_gems.ops.sum import sum, sum_dim, sum_dim_out, sum_out
+from flag_gems.ops.tan import tan, tan_
 from flag_gems.ops.tanh import tanh, tanh_, tanh_backward
 from flag_gems.ops.threshold import threshold, threshold_backward
 from flag_gems.ops.tile import tile
-from flag_gems.ops.to import to_dtype
+from flag_gems.ops.to import to_copy
 from flag_gems.ops.topk import topk
 from flag_gems.ops.trace import trace
 from flag_gems.ops.triu import triu
@@ -247,6 +249,8 @@ __all__ = [
     "arange_start",
     "argmax",
     "argmin",
+    "avg_pool2d",
+    "avg_pool2d_backward",
     "atan",
     "atan_",
     "batch_norm",
@@ -465,13 +469,15 @@ __all__ = [
     "sum_dim",
     "sum_dim_out",
     "sum_out",
+    "tan",
+    "tan_",
     "tanh",
     "tanh_",
     "tanh_backward",
     "threshold",
     "threshold_backward",
     "tile",
-    "to_dtype",
+    "to_copy",
     "topk",
     "trace",
     "triu",
