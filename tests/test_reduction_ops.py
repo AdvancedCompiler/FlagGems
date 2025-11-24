@@ -1,4 +1,3 @@
-import os
 import random
 import time
 
@@ -230,7 +229,6 @@ def test_accuracy_cross_entropy_loss_probabilities(
     gems_assert_close(res_in_grad, ref_in_grad, dtype, reduce_dim=shape[dim])
 
 
-@pytest.mark.skipif(flag_gems.vendor_name == "kunlunxin", reason="RESULT TODOFIX")
 @pytest.mark.nll_loss
 @pytest.mark.parametrize("reduction", ["mean", "none", "sum"])
 @pytest.mark.parametrize("weight", [True, False])
@@ -318,10 +316,6 @@ CUMMIN_SHAPES = (
 @pytest.mark.parametrize("shape", CUMMIN_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES + INT_DTYPES)
 def test_accuracy_cummin(shape, dtype):
-    if flag_gems.vendor_name == "mthreads":
-        # Compatible with older versions of LLVM
-        os.environ["DISABLE_LLVM_OPT"] = "1"
-
     dim = 1 if shape == REDUCTION_SHAPES[-1] else -1
     if dtype in INT_DTYPES:
         inp = torch.randint(-3, 3, shape, device=flag_gems.device).to(dtype)
@@ -335,9 +329,6 @@ def test_accuracy_cummin(shape, dtype):
     gems_assert_close(res_out.values, ref_out.values, dtype, reduce_dim=shape[dim])
     gems_assert_equal(res_out.indices, ref_out.indices)
 
-    if flag_gems.vendor_name == "mthreads":
-        del os.environ["DISABLE_LLVM_OPT"]
-
 
 @pytest.mark.cummin
 @pytest.mark.parametrize("shape", CUMMIN_SHAPES)
@@ -345,10 +336,6 @@ def test_accuracy_cummin(shape, dtype):
 @pytest.mark.parametrize("nan_ratio", [0.1, 0.3, 0.5])
 def test_accuracy_cummin_with_nan(shape, dtype, nan_ratio):
     """Test cummin with NaN values at different ratios"""
-    if flag_gems.vendor_name == "mthreads":
-        # Compatible with older versions of LLVM
-        os.environ["DISABLE_LLVM_OPT"] = "1"
-
     dim = 1 if shape == REDUCTION_SHAPES[-1] else -1
 
     # Create tensor with some NaN values
@@ -372,9 +359,6 @@ def test_accuracy_cummin_with_nan(shape, dtype, nan_ratio):
         res_out.values, ref_out.values, dtype, reduce_dim=shape[dim], equal_nan=True
     )
     gems_assert_equal(res_out.indices, ref_out.indices)
-
-    if flag_gems.vendor_name == "mthreads":
-        del os.environ["DISABLE_LLVM_OPT"]
 
 
 CUMMAX_SHAPES = (
@@ -390,10 +374,6 @@ CUMMAX_SHAPES = (
 @pytest.mark.parametrize("shape", CUMMAX_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES + INT_DTYPES)
 def test_accuracy_cummax(shape, dtype):
-    if flag_gems.vendor_name == "mthreads":
-        # Compatible with older versions of LLVM
-        os.environ["DISABLE_LLVM_OPT"] = "1"
-
     dim = 1 if shape == REDUCTION_SHAPES[-1] else -1
     if dtype in INT_DTYPES:
         inp = torch.randint(-3, 3, shape, device=flag_gems.device).to(dtype)
@@ -407,9 +387,6 @@ def test_accuracy_cummax(shape, dtype):
     gems_assert_close(res_out.values, ref_out.values, dtype, reduce_dim=shape[dim])
     gems_assert_equal(res_out.indices, ref_out.indices)
 
-    if flag_gems.vendor_name == "mthreads":
-        del os.environ["DISABLE_LLVM_OPT"]
-
 
 @pytest.mark.cummax
 @pytest.mark.parametrize("shape", CUMMAX_SHAPES)
@@ -417,10 +394,6 @@ def test_accuracy_cummax(shape, dtype):
 @pytest.mark.parametrize("nan_ratio", [0.1, 0.3, 0.5])
 def test_accuracy_cummax_with_nan(shape, dtype, nan_ratio):
     """Test cummax with NaN values at different ratios"""
-    if flag_gems.vendor_name == "mthreads":
-        # Compatible with older versions of LLVM
-        os.environ["DISABLE_LLVM_OPT"] = "1"
-
     dim = 1 if shape == REDUCTION_SHAPES[-1] else -1
 
     # Create tensor with some NaN values
@@ -444,9 +417,6 @@ def test_accuracy_cummax_with_nan(shape, dtype, nan_ratio):
         res_out.values, ref_out.values, dtype, reduce_dim=shape[dim], equal_nan=True
     )
     gems_assert_equal(res_out.indices, ref_out.indices)
-
-    if flag_gems.vendor_name == "mthreads":
-        del os.environ["DISABLE_LLVM_OPT"]
 
 
 NONZERO_SHAPES = [(2, 32)] if QUICK_MODE else REDUCTION_SHAPES + [(2637,)]

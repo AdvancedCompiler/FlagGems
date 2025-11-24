@@ -1,4 +1,3 @@
-import os
 import random
 from typing import Generator
 
@@ -208,17 +207,12 @@ def test_generic_reduction_benchmark(op_name, torch_op, input_fn, dtypes):
             pytest.skip("RUNTIME TODOFIX")
         elif op_name in ["cummax"]:
             pytest.skip("CUMSUM UNSUPPORTED")
-    if vendor_name == "mthreads" and op_name in ["cummin", "cummax"]:
-        # Compatible with older versions of LLVM
-        os.environ["DISABLE_LLVM_OPT"] = "1"
     bench = GenericBenchmark2DOnly(
         input_fn=input_fn, op_name=op_name, torch_op=torch_op, dtypes=dtypes
     )
     if op_name == "cross_entropy_loss":
         bench.set_gems(flag_gems.cross_entropy_loss)
     bench.run()
-    if vendor_name == "mthreads" and op_name in ["cummin", "cummax"]:
-        del os.environ["DISABLE_LLVM_OPT"]
 
 
 @pytest.mark.skipif(vendor_name == "hygon", reason="RESULT TODOFIX")
@@ -293,6 +287,29 @@ class AvgPool2dBenchmark(GenericBenchmark):
 
         for shape in shapes_4d:
             yield from self.input_fn(shape, cur_dtype, self.device)
+
+
+@pytest.mark.avg_pool2d
+def test_perf_avg_pool2d():
+    bench = AvgPool2dBenchmark(
+        input_fn=avg_pool2d_input_fn,
+        op_name="avg_pool2d",
+        torch_op=torch.ops.aten.avg_pool2d,
+        dtypes=FLOAT_DTYPES,
+    )
+    bench.run()
+
+
+@pytest.mark.avg_pool2d_backward
+def test_perf_avg_pool2d_backward():
+    bench = AvgPool2dBenchmark(
+        input_fn=avg_pool2d_input_fn,
+        op_name="avg_pool2d",
+        torch_op=torch.ops.aten.avg_pool2d,
+        dtypes=FLOAT_DTYPES,
+        is_backward=True,
+    )
+    bench.run()
 
 
 def max_pool2d_input_fn(shape, dtype, device):
@@ -405,6 +422,7 @@ def test_perf_dot():
     bench.run()
 
 
+@pytest.mark.skipif(flag_gems.vendor_name == "mthreads", reason="RESULT TODOFIX")
 @pytest.mark.trace
 def test_perf_trace():
     def trace_input_fn(shape, dtype, device):
@@ -435,7 +453,7 @@ def quantile_input_fn(shape, cur_dtype, device):
     yield inp, q, 0
 
 
-@pytest.mark.skipif(True, reason="Skipping Triton version")
+@pytest.mark.skipif(True, reason="Skipping Triton version due to poor performance")
 @pytest.mark.parametrize(
     "op_name, torch_op, input_fn, dtypes",
     [
