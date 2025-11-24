@@ -157,6 +157,9 @@ class _SwiGLUAutograd(torch.autograd.Function):
         quantizer = ctx.quantizer  # noqa
 
         shape = input_tensor.shape
+        assert (
+            shape[-1] % 2 == 0
+        ), f"_SwiGLUAutograd.backward: input_tensor 最后一维需为偶数，实际为 {shape[-1]}"
         H = shape[-1] // 2
         M = input_tensor.numel() // (2 * H)
         grad_out_2d = grad_output.contiguous().view(M, H)
@@ -201,6 +204,7 @@ def dswiglu(
     quantizer: Optional[Any] = None,  # noqa
 ) -> torch.Tensor:
     shape = input_tensor.shape
+    assert shape[-1] % 2 == 0, f"dswiglu: input_tensor 最后一维需为偶数，实际为 {shape[-1]}"
     H = shape[-1] // 2
     M = input_tensor.numel() // (2 * H)
     grad_out_2d = grad_output.contiguous().view(M, H)

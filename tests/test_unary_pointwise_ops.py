@@ -18,6 +18,7 @@ from .accuracy_utils import (
     FLOAT_DTYPES,
     INT_DTYPES,
     POINTWISE_SHAPES,
+    SWIGLU_SPECIAL_SHAPES,
     gems_assert_close,
     gems_assert_equal,
     to_reference,
@@ -418,7 +419,7 @@ def filter_valid_shapes(shapes: list[tuple[int, ...]]) -> list[tuple[int, ...]]:
     return valid_shapes
 
 
-VALID_POINTWISE_SHAPES = filter_valid_shapes(POINTWISE_SHAPES)
+VALID_POINTWISE_SHAPES = filter_valid_shapes(SWIGLU_SPECIAL_SHAPES)
 
 
 @pytest.mark.swiglu
