@@ -41,18 +41,7 @@ class BlasBenchmark(Benchmark):
         ]
 
         model_shaps = model_shapes()
-        if self.op_name == "baddbmm":
-            skip_shapes = [
-                (4, 8192, 128256, 4096),
-                (4, 8192, 152064, 3584),
-            ]
-            filtered_model_shaps = []
-            for shape in model_shaps:
-                if shape not in skip_shapes:
-                    filtered_model_shaps.append(shape)
-            return filtered_model_shaps
-        else:
-            return large_k_shapes + model_shaps
+        return large_k_shapes + model_shaps
 
     def get_tflops(self, op, *args, **kwargs):
         total_flops = 0
@@ -85,6 +74,27 @@ class BlasBenchmark(Benchmark):
                 * (args[1].shape[1] * 2 + 1)
             )
         return total_flops
+
+
+class BaddbmmBenchmark(BlasBenchmark):
+    """
+    benchmark for Baddbmm
+    """
+
+    def set_more_shapes(self):
+        model_shapes_list = model_shapes()
+
+        skip_shapes = [
+            (4, 8192, 128256, 4096),
+            (4, 8192, 152064, 3584),
+        ]
+
+        filtered = []
+        for shape in model_shapes_list:
+            if shape not in skip_shapes:
+                filtered.append(shape)
+
+        return filtered
 
 
 def addmm_input_fn(b, m, n, k, cur_dtype, device, b_column_major):
@@ -137,36 +147,40 @@ def mm_input_fn(b, m, n, k, cur_dtype, device, b_column_major):
 
 
 @pytest.mark.parametrize(
-    "op_name, torch_op, input_fn",
+    "op_name, torch_op, input_fn,bench_cls",
     [
         pytest.param(
             "addmm",
             torch.addmm,
             addmm_input_fn,
+            BlasBenchmark,
             marks=pytest.mark.addmm,
         ),
         pytest.param(
             "bmm",
             torch.bmm,
             bmm_input_fn,
+            BlasBenchmark,
             marks=pytest.mark.bmm,
         ),
         pytest.param(
             "mm",
             torch.Tensor.mm,
             mm_input_fn,
+            BlasBenchmark,
             marks=pytest.mark.mm,
         ),
         pytest.param(
             "baddbmm",
             torch.baddbmm,
             baddbmm_input_fn,
+            BaddbmmBenchmark,
             marks=pytest.mark.baddbmm,
         ),
     ],
 )
-def test_blas_benchmark(op_name, torch_op, input_fn):
-    bench = BlasBenchmark(
+def test_blas_benchmark(op_name, torch_op, input_fn, bench_cls):
+    bench = bench_cls(
         input_fn=input_fn, op_name=op_name, torch_op=torch_op, dtypes=FLOAT_DTYPES
     )
     bench.run()

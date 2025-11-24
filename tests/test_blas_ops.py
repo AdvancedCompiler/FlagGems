@@ -133,8 +133,7 @@ def test_accuracy_baddbmm(M, N, K, scalar, dtype):
     alpha = beta = scalar
 
     ref_out = torch.baddbmm(ref_bias, ref_mat1, ref_mat2, alpha=alpha, beta=beta)
-    with flag_gems.use_gems():
-        res_out = torch.baddbmm(bias, mat1, mat2, alpha=alpha, beta=beta)
+    res_out = flag_gems.baddbmm(bias, mat1, mat2, alpha=alpha, beta=beta)
 
     gems_assert_close(res_out, ref_out, dtype, reduce_dim=K)
 
@@ -162,8 +161,7 @@ def test_accuracy_baddbmm_backward(M, N, K, scalar, dtype):
     alpha = beta = scalar
 
     ref_out = torch.baddbmm(ref_bias, ref_mat1, ref_mat2, alpha=alpha, beta=beta)
-    with flag_gems.use_gems():
-        res_out = torch.baddbmm(bias, mat1, mat2, alpha=alpha, beta=beta)
+    res_out = flag_gems.baddbmm(bias, mat1, mat2, alpha=alpha, beta=beta)
 
     out_grad = torch.randn_like(res_out)
     ref_grad = to_reference(out_grad)
@@ -171,10 +169,9 @@ def test_accuracy_baddbmm_backward(M, N, K, scalar, dtype):
     (ref_in_bias, ref_in_grad1, ref_in_grad2) = torch.autograd.grad(
         ref_out, (ref_bias, ref_mat1, ref_mat2), ref_grad
     )
-    with flag_gems.use_gems():
-        (res_in_bias, res_in_grad1, res_in_grad2) = torch.autograd.grad(
-            res_out, (bias, mat1, mat2), out_grad
-        )
+    (res_in_bias, res_in_grad1, res_in_grad2) = torch.autograd.grad(
+        res_out, (bias, mat1, mat2), out_grad
+    )
 
     gems_assert_close(ref_in_bias, res_in_bias, dtype, reduce_dim=K)
     gems_assert_close(ref_in_grad1, res_in_grad1, dtype, reduce_dim=N)

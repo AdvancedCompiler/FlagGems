@@ -6,16 +6,19 @@ import triton.language as tl
 
 from .. import runtime
 from ..runtime import torch_device_fn
-from ..utils import libentry
+from ..utils import libentry, libtuner
 from ..utils import triton_lang_extension as tle
 from .bmm import bmm
 from .mul import mul
 
 
 @libentry()
-@triton.autotune(
+@libtuner(
     configs=runtime.get_tuned_config("baddbmm"),
     key=["M", "N", "K"],
+    strategy=["align32", "align32", "align32"],
+    warmup=5,
+    rep=10,
 )
 @triton.heuristics(runtime.get_heuristic_config("baddbmm"))
 @triton.jit(do_not_specialize=["alpha", "beta"])
@@ -175,7 +178,7 @@ class BaddbmmFunction(torch.autograd.Function):
         grad_B = None
         grad_bias = None
         if ctx.needs_input_grad[0]:
-            grad_bias = compute_bias_grad(grad_output, ctx.beta)
+            grad_bias = compute_bias_grad(grad_output, ctx.beta, bias)
         if ctx.needs_input_grad[1]:
             grad_A = compute_A_grad(grad_output, B, ctx.alpha)
         if ctx.needs_input_grad[2]:
@@ -184,11 +187,16 @@ class BaddbmmFunction(torch.autograd.Function):
         return grad_bias, grad_A, grad_B, None, None
 
 
-def compute_bias_grad(d_output, beta):
-    batch, M, N = d_output.shape
-    d_bias = torch.zeros((M, N), device=d_output.device, dtype=d_output.dtype)
-    d_bias = mul(d_output, beta)
-    return d_bias
+def compute_bias_grad(d_output, beta, bias):
+    grad_bias = mul(d_output, beta)
+    if grad_bias.shape != bias.shape:
+        # Sum over broadcasted dimensions
+        while grad_bias.dim() > bias.dim():
+            grad_bias = grad_bias.sum(dim=0)
+        for i in range(bias.dim()):
+            if bias.shape[i] == 1 and grad_bias.shape[i] > 1:
+                grad_bias = grad_bias.sum(dim=i, keepdim=True)
+    return grad_bias.view(bias.shape)
 
 
 def compute_A_grad(d_output, B, alpha):
