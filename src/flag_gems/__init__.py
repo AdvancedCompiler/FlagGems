@@ -37,6 +37,7 @@ def enable(
             ("_log_softmax_backward_data", log_softmax_backward),
             ("_softmax", softmax),
             ("_softmax_backward_data", softmax_backward),
+            ("_to_copy", to_copy),
             ("_unique2", _unique2),
             ("_upsample_bicubic2d_aa", _upsample_bicubic2d_aa),
             ("_weight_norm_interface", weight_norm_interface),
@@ -64,6 +65,8 @@ def enable(
             ("arange.start_step", arange_start),
             ("argmax", argmax),
             ("argmin", argmin),
+            ("avg_pool2d", avg_pool2d),
+            ("avg_pool2d_backward", avg_pool2d_backward),
             ("atan", atan),
             ("atan_", atan_),
             ("baddbmm", baddbmm),
@@ -95,6 +98,8 @@ def enable(
             ("contiguous", contiguous),
             ("cos", cos),
             ("cos_", cos_),
+            ("tan", tan),
+            ("tan_", tan_),
             ("count_nonzero", count_nonzero),
             ("cummax", cummax),
             ("cummin", cummin),
@@ -302,7 +307,6 @@ def enable(
             ("threshold", threshold),
             ("threshold_backward", threshold_backward),
             ("tile", tile),
-            ("to.dtype", to_dtype),
             ("topk", topk),
             ("trace", trace),
             ("triu", triu),
@@ -351,6 +355,8 @@ class use_gems:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         global current_work_registrar
+        if torch.__version__ >= "2.5":
+            self.lib._destroy()
         del self.lib
         del self.unused
         del self.registrar

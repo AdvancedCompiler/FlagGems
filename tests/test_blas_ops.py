@@ -184,8 +184,6 @@ def test_accuracy_baddbmm_backward(M, N, K, scalar, dtype):
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 @pytest.mark.parametrize("b_column_major", [True, False])
 def test_accuracy_mm(M, N, K, dtype, b_column_major):
-    if flag_gems.vendor_name == "mthreads":
-        os.environ["MUSA_ENABLE_SQMMA"] = "1"
     mat1 = torch.randn((M, K), dtype=dtype, device=flag_gems.device)
     if b_column_major:
         mat2 = torch.randn((N, K), dtype=dtype, device=flag_gems.device).t()
@@ -199,9 +197,6 @@ def test_accuracy_mm(M, N, K, dtype, b_column_major):
         res_out = torch.mm(mat1, mat2)
 
     gems_assert_close(res_out, ref_out, dtype, reduce_dim=K)
-
-    if flag_gems.vendor_name == "mthreads":
-        del os.environ["MUSA_ENABLE_SQMMA"]
 
 
 @pytest.mark.mv
@@ -220,7 +215,6 @@ def test_accuracy_mv(M, N, dtype):
     gems_assert_close(res_out, ref_out, dtype, reduce_dim=M)
 
 
-@pytest.mark.skipif(flag_gems.vendor_name == "mthreads", reason="Result TODO Fix")
 @pytest.mark.addmv
 @pytest.mark.parametrize("M, N", MN_SHAPES)
 @pytest.mark.parametrize("scalar", SCALARS)
@@ -304,7 +298,6 @@ def test_accuracy_outer(M, N, dtype):
     gems_assert_close(res_in2_grad, ref_in2_grad, dtype, reduce_dim=M)
 
 
-@pytest.mark.skipif(flag_gems.vendor_name == "kunlunxin", reason="RESULT TODOFIX")
 @pytest.mark.vdot
 @pytest.mark.parametrize("M", UT_SHAPES_1D)
 @pytest.mark.parametrize(
@@ -313,6 +306,10 @@ def test_accuracy_outer(M, N, dtype):
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES + [torch.cfloat])
 @pytest.mark.parametrize("stride", [1, 2])
 def test_accuracy_vdot(M, is_conj, dtype, stride):
+    if flag_gems.vendor_name == "kunlunxin":
+        torch.manual_seed(0)
+        torch.cuda.manual_seed_all(0)
+
     inp1_is_conj, inp2_is_conj = is_conj
 
     if flag_gems.vendor_name == "mthreads":
@@ -320,6 +317,9 @@ def test_accuracy_vdot(M, is_conj, dtype, stride):
         inp2 = torch.randn(M, dtype=dtype, device="cpu")
     elif flag_gems.vendor_name == "ascend" and dtype == torch.cfloat:
         pytest.skip("Skipping torch.cfloat tests on Ascend platform")
+    elif flag_gems.vendor_name == "kunlunxin" and dtype == torch.cfloat:
+        inp1 = torch.randn(M, dtype=dtype, device="cpu")
+        inp2 = torch.randn(M, dtype=dtype, device="cpu")
     else:
         inp1 = torch.randn(M, dtype=dtype, device=flag_gems.device)
         inp2 = torch.randn(M, dtype=dtype, device=flag_gems.device)

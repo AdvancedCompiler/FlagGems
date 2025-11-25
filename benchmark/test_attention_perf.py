@@ -33,9 +33,11 @@ def test_perf_scaled_dot_product_attention(dropout_p, is_causal):
         query = torch.randn(shape, device=device, dtype=dtype)
         key = torch.randn(shape, device=device, dtype=dtype)
         value = torch.randn(shape, device=device, dtype=dtype)
-        yield query, key, value, dropout_p, is_causal
+        yield query, key, value, None, dropout_p, is_causal
 
-    def sdpa_flash(query, key, value, dropout_p=dropout_p, is_causal=is_causal):
+    def sdpa_flash(
+        query, key, value, attn_mask=None, dropout_p=dropout_p, is_causal=is_causal
+    ):
         from torch.nn.attention import SDPBackend, sdpa_kernel
 
         with sdpa_kernel(backends=[SDPBackend.FLASH_ATTENTION]):
@@ -43,7 +45,7 @@ def test_perf_scaled_dot_product_attention(dropout_p, is_causal):
                 query,
                 key,
                 value,
-                attn_mask=None,
+                attn_mask=attn_mask,
                 dropout_p=dropout_p,
                 is_causal=is_causal,
             )
@@ -58,6 +60,7 @@ def test_perf_scaled_dot_product_attention(dropout_p, is_causal):
             torch.bfloat16,
         ],
     )
+    bench.set_gems(flag_gems.scaled_dot_product_attention)
     bench.run()
 
 
@@ -75,7 +78,6 @@ class FlashMLABenchmark(GenericBenchmark):
 @pytest.mark.skipif(vendor_name == "metax", reason="TODOFIX")
 @pytest.mark.skipif(vendor_name == "kunlunxin", reason="RESULT TODOFIX")
 @pytest.mark.skipif(vendor_name == "hygon", reason="RuntimeError")
-@pytest.mark.skipif(vendor_name == "mthreads", reason="RESULT TODOFIX")
 @pytest.mark.skipif(flag_gems.vendor_name == "cambricon", reason="TypeError")
 @pytest.mark.flash_mla
 def test_perf_flash_mla():
@@ -159,6 +161,9 @@ def test_perf_flash_mla():
             lse[i] = LSE
         return out, lse
 
+    if flag_gems.vendor_name == "mthreads":
+        os.environ["MUSA_ENABLE_SQMMA"] = "1"
+
     bench = FlashMLABenchmark(
         op_name="flash_mla",
         input_fn=flash_mla_kwargs,
@@ -169,6 +174,9 @@ def test_perf_flash_mla():
     )
     bench.set_gems(flag_gems.flash_mla)
     bench.run()
+
+    if flag_gems.vendor_name == "mthreads":
+        del os.environ["MUSA_ENABLE_SQMMA"]
 
 
 class FlashAttnVarlenBenchmark(Benchmark):
