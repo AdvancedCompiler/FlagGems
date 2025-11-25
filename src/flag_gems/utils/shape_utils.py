@@ -7,13 +7,17 @@ import torch
 import triton
 import triton.language as tl
 
-from ..utils import triton_lang_extension as tle
-from .codegen_config_utils import get_heuristics_for_num_warps
+from flag_gems.utils import triton_lang_extension as tle
+from flag_gems.utils.codegen_config_utils import get_heuristics_for_num_warps
 
 Shape = Tuple[int]
 Stride = Tuple[int]
 MultiIndex = Tuple[int]
 Perm = Tuple[int]
+
+
+def bracket_next_power_of_2(N, lower, upper):
+    return min(max(triton.next_power_of_2(N), lower), upper)
 
 
 def broadcast(s1: Shape, s2: Shape) -> Shape:
