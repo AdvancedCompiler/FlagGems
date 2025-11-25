@@ -183,11 +183,11 @@ def mm_input_fn(b, m, n, k, cur_dtype, device, b_column_major):
         ),
     ],
 )
-def test_blas_benchmark(op_name, torch_op, input_fn):
+def test_blas_benchmark(op_name, torch_op, input_fn, bench_cls):
     if flag_gems.vendor_name == "mthreads" and op_name != "mm":
         os.environ["MUSA_ENABLE_SQMMA"] = "1"
 
-    bench = BlasBenchmark(
+    bench = bench_cls(
         input_fn=input_fn, op_name=op_name, torch_op=torch_op, dtypes=FLOAT_DTYPES
     )
     bench.run()
