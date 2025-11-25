@@ -151,7 +151,7 @@ def mm_input_fn(b, m, n, k, cur_dtype, device, b_column_major):
 
 
 @pytest.mark.parametrize(
-    "op_name, torch_op, input_fn,bench_cls",
+    "op_name, torch_op, input_fn, bench_cls",
     [
         pytest.param(
             "addmm",
