@@ -155,16 +155,16 @@ def test_accuracy_baddbmm_backward(M, N, K, scalar, dtype):
     bias = torch.randn(
         (batch, M, N), dtype=dtype, device=flag_gems.device, requires_grad=True
     )
-    ref_mat1 = to_reference(mat1)
-    ref_mat2 = to_reference(mat2)
-    ref_bias = to_reference(bias)
+    ref_mat1 = to_reference(mat1, True)
+    ref_mat2 = to_reference(mat2, True)
+    ref_bias = to_reference(bias, True)
     alpha = beta = scalar
 
     ref_out = torch.baddbmm(ref_bias, ref_mat1, ref_mat2, alpha=alpha, beta=beta)
     res_out = flag_gems.baddbmm(bias, mat1, mat2, alpha=alpha, beta=beta)
 
     out_grad = torch.randn_like(res_out)
-    ref_grad = to_reference(out_grad)
+    ref_grad = to_reference(out_grad, True)
 
     (ref_in_bias, ref_in_grad1, ref_in_grad2) = torch.autograd.grad(
         ref_out, (ref_bias, ref_mat1, ref_mat2), ref_grad
