@@ -64,15 +64,6 @@ class BlasBenchmark(Benchmark):
                 * 2
                 * args[0].shape[2]
             )
-        # shape(b,m,k)(b,k,n)
-        # total_flops = b * m * n * (2 * k + 1)
-        elif self.op_name == "baddbmm":
-            total_flops = (
-                args[1].shape[0]
-                * args[1].shape[1]
-                * args[2].shape[2]
-                * (args[1].shape[2] * 2 + 1)
-            )
         return total_flops
 
 
@@ -95,6 +86,17 @@ class BaddbmmBenchmark(BlasBenchmark):
                 filtered.append(shape)
 
         return filtered
+
+    def get_tflops(self, op, *args, **kwargs):
+        # shape(b,m,k)(b,k,n)
+        # total_flops = b * m * n * (2 * k + 1)
+        total_flops = (
+            args[1].shape[0]
+            * args[1].shape[1]
+            * args[2].shape[2]
+            * (args[1].shape[2] * 2 + 1)
+        )
+        return total_flops
 
 
 def addmm_input_fn(b, m, n, k, cur_dtype, device, b_column_major):
