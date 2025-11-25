@@ -128,7 +128,8 @@ FP8_MNK_SHAPES = [
 @pytest.mark.parametrize("M,N,K", FP8_MNK_SHAPES)
 def test_accuracy_w8a8_block_fp8_matmul(M, N, K):
     # dtype = torch.float8_e4m3fn
-    assert torch.cuda.is_available()
+    if not torch.cuda.is_available():
+        pytest.skip("w8a8_block_fp8_matmul test requires CUDA")
     major, _ = torch.cuda.get_device_capability()
     if major > 8:
         dtype = torch.float8_e4m3fn
@@ -177,6 +178,7 @@ def test_accuracy_w8a8_block_fp8_matmul(M, N, K):
             )
 
     ref_out = torch.matmul(A_scaled, B_scaled.T)
+    ref_out = to_reference(ref_out, True)
     with flag_gems.use_gems():
         res_out = flag_gems.w8a8_block_fp8_matmul(
             A, B, As, Bs, block_size, output_dtype=torch.float16
