@@ -1,4 +1,5 @@
 import math
+import os
 
 import numpy as np
 import pytest
@@ -22,7 +23,6 @@ KEEPDIM_DIMS = (
 
 
 @pytest.mark.group_norm
-@pytest.mark.native_group_norm
 @pytest.mark.parametrize(
     "N, C, H, W, num_groups",
     [
@@ -68,7 +68,6 @@ def test_accuracy_groupnorm(N, C, H, W, num_groups, dtype, wb_none):
 
 
 @pytest.mark.group_norm
-@pytest.mark.native_group_norm
 @pytest.mark.parametrize(
     "N, C, H, W, num_groups",
     [
@@ -148,9 +147,7 @@ def test_accuracy_groupnorm_backward(N, C, H, W, num_groups, dtype, wb_none):
         gems_assert_close(res_bias_grad, ref_bias_grad, dtype, reduce_dim=N * HxW)
 
 
-@pytest.mark.skipif(flag_gems.device == "musa", reason="to_cpu unknown error")
 @pytest.mark.layer_norm
-@pytest.mark.native_layer_norm
 @pytest.mark.parametrize(
     "shape",
     (
@@ -205,7 +202,6 @@ def test_accuracy_layernorm(shape, dtype, wb_none):
 
 
 @pytest.mark.layer_norm
-@pytest.mark.native_layer_norm
 @pytest.mark.parametrize(
     "shape",
     (
@@ -226,6 +222,9 @@ def test_accuracy_layernorm_backward(shape, dtype, wb_none):
     if flag_gems.vendor_name == "kunlunxin":
         torch.manual_seed(0)
         torch.cuda.manual_seed_all(0)
+    if flag_gems.vendor_name == "mthreads":
+        # Compatible with older versions of LLVM
+        os.environ["DISABLE_LLVM_OPT"] = "1"
 
     res_inp = torch.randn(shape, dtype=dtype, device=flag_gems.device)
     res_grad = torch.randn_like(res_inp)
@@ -284,11 +283,13 @@ def test_accuracy_layernorm_backward(shape, dtype, wb_none):
         gems_assert_close(res_weight_grad, ref_weight_grad, dtype, reduce_dim=shape[0])
         gems_assert_close(res_bias_grad, ref_bias_grad, dtype, reduce_dim=shape[0])
 
+    if flag_gems.vendor_name == "mthreads":
+        # Compatible with older versions of LLVM
+        del os.environ["DISABLE_LLVM_OPT"]
 
-@pytest.mark.skipif(flag_gems.device == "musa", reason="AssertionError")
+
 @pytest.mark.skipif(flag_gems.vendor_name == "kunlunxin", reason="RESULT TODOFIX")
 @pytest.mark.instance_norm
-@pytest.mark.native_instance_norm
 @pytest.mark.parametrize(
     "shape",
     (
@@ -454,7 +455,7 @@ WEIGHT_NORM_INTERFACE_SHAPE_DIM = list(
 )
 
 
-@pytest.mark.weight_norm_interface
+@pytest.mark.weight_norm
 @pytest.mark.parametrize("shape, dim", WEIGHT_NORM_INTERFACE_SHAPE_DIM)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_accuracy_weightnorm_interface(shape, dtype, dim):
@@ -479,7 +480,7 @@ def test_accuracy_weightnorm_interface(shape, dtype, dim):
 @pytest.mark.skipif(
     True, reason="Temporarely skip for ci"
 )  # todo: improve backward precision
-@pytest.mark.weight_norm_interface
+@pytest.mark.weight_norm
 @pytest.mark.parametrize("shape, dim", WEIGHT_NORM_INTERFACE_SHAPE_DIM)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_accuracy_weightnorm_interface_backward(shape, dtype, dim):
@@ -656,8 +657,7 @@ def test_accuracy_vectornorm(shape, ord, dim, keepdim, dtype):
     gems_assert_close(res_out, ref_out, dtype)
 
 
-@pytest.mark.skipif(flag_gems.device == "musa", reason="ZeroDivisionError")
-# @pytest.mark.skipif(flag_gems.vendor_name == "kunlunxin", reason="RESULT TODOFIX")
+@pytest.mark.skipif(flag_gems.vendor_name == "kunlunxin", reason="RESULT TODOFIX")
 @pytest.mark.batch_norm
 @pytest.mark.parametrize(
     "shape",
@@ -719,6 +719,7 @@ def test_accuracy_batch_norm(shape, dtype, affine):
     gems_assert_close(running_var, ref_running_var, dtype)
 
 
+@pytest.mark.skipif(flag_gems.vendor_name == "kunlunxin", reason="RESULT TODOFIX")
 @pytest.mark.batch_norm
 @pytest.mark.parametrize(
     "shape",

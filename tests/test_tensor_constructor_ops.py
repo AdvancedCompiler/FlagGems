@@ -25,8 +25,9 @@ device = flag_gems.device
 def test_accuracy_rand(shape, dtype):
     with flag_gems.use_gems():
         res_out = torch.rand(shape, dtype=dtype, device=device)
-    assert (res_out <= 1.0).all()
-    assert (res_out >= 0.0).all()
+    ref_out = to_reference(res_out)
+    assert (ref_out <= 1.0).all()
+    assert (ref_out >= 0.0).all()
 
 
 @pytest.mark.randn
@@ -37,8 +38,9 @@ def test_accuracy_randn(shape, dtype):
         torch.manual_seed(42)
     with flag_gems.use_gems():
         res_out = torch.randn(shape, dtype=dtype, device=device)
-    mean = torch.mean(res_out)
-    std = torch.std(res_out)
+    ref_out = to_reference(res_out)
+    mean = torch.mean(ref_out)
+    std = torch.std(ref_out)
     assert torch.abs(mean) < 0.01
     assert torch.abs(std - 1) < 0.01
 
@@ -50,8 +52,9 @@ def test_accuracy_rand_like(shape, dtype):
     x = torch.randn(size=shape, dtype=dtype, device=device)
     with flag_gems.use_gems():
         res_out = torch.rand_like(x)
-    assert (res_out <= 1.0).all()
-    assert (res_out >= 0.0).all()
+    ref_out = to_reference(res_out)
+    assert (ref_out <= 1.0).all()
+    assert (ref_out >= 0.0).all()
 
 
 @pytest.mark.randn_like
@@ -61,8 +64,9 @@ def test_accuracy_randn_like(shape, dtype):
     x = torch.randn(size=shape, dtype=dtype, device=device)
     with flag_gems.use_gems():
         res_out = torch.randn_like(x)
-    mean = torch.mean(res_out.to("cpu"))
-    std = torch.std(res_out.to("cpu"))
+    ref_out = to_reference(res_out)
+    mean = torch.mean(ref_out)
+    std = torch.std(ref_out)
     assert torch.abs(mean) < 0.01
     assert torch.abs(std - 1) < 0.01
 
@@ -168,7 +172,6 @@ def test_accuracy_full_like(shape, dtype, xdtype, fill_value):
 
 
 @pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RESULT TODOFIX")
-@pytest.mark.skipif(flag_gems.device == "musa", reason="ZeroDivisionError")
 @pytest.mark.skipif(flag_gems.vendor_name == "kunlunxin", reason="RESULT TODOFIX")
 @pytest.mark.randperm
 @pytest.mark.parametrize("n", [123, 12345, 123456])
