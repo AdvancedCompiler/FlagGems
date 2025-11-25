@@ -173,9 +173,9 @@ def test_accuracy_baddbmm_backward(M, N, K, scalar, dtype):
         res_out, (bias, mat1, mat2), out_grad
     )
 
-    gems_assert_close(ref_in_bias, res_in_bias, dtype, reduce_dim=K)
-    gems_assert_close(ref_in_grad1, res_in_grad1, dtype, reduce_dim=N)
-    gems_assert_close(ref_in_grad2, res_in_grad2, dtype, reduce_dim=M)
+    gems_assert_close(res_in_bias, ref_in_bias, dtype, reduce_dim=K)
+    gems_assert_close(res_in_grad1, ref_in_grad1, dtype, reduce_dim=N)
+    gems_assert_close(res_in_grad2, ref_in_grad2, dtype, reduce_dim=M)
 
 
 # TODO: failed at (1, 1, 2)
