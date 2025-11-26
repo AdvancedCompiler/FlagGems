@@ -274,10 +274,7 @@ def test_accuracy_exp2(shape, dtype):
     inp = torch.randn(shape, dtype=dtype, device=flag_gems.device)
     ref_inp = to_reference(inp, True)
 
-    if flag_gems.vendor_name == "kunlunxin":
-        ref_out = torch.exp2(ref_inp.cpu()).to(flag_gems.device)
-    else:
-        ref_out = torch.exp2(ref_inp)
+    ref_out = torch.exp2(ref_inp)
     with flag_gems.use_gems():
         res_out = torch.exp2(inp)
 
@@ -292,10 +289,7 @@ def test_accuracy_exp2_(shape, dtype):
     inp = torch.randn(shape, dtype=dtype, device=flag_gems.device)
     ref_inp = to_reference(inp.clone(), True)
 
-    if flag_gems.vendor_name == "kunlunxin":
-        ref_out = torch.exp2_(ref_inp.cpu()).to(flag_gems.device)
-    else:
-        ref_out = torch.exp2_(ref_inp)
+    ref_out = torch.exp2_(ref_inp)
     with flag_gems.use_gems():
         res_out = torch.exp2_(inp)
 
@@ -795,6 +789,35 @@ def test_accuracy_sin_(shape, dtype):
     ref_out = torch.sin_(ref_inp)
     with flag_gems.use_gems():
         res_out = torch.sin_(inp)
+
+    gems_assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.tan
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_tan(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=flag_gems.device)
+    ref_inp = to_reference(inp, True)
+
+    ref_out = torch.tan(ref_inp)
+    with flag_gems.use_gems():
+        res_out = torch.tan(inp)
+
+    gems_assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.inplace
+@pytest.mark.tan_
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_tan_(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=flag_gems.device)
+    ref_inp = to_reference(inp.clone(), True)
+
+    ref_out = torch.tan_(ref_inp)
+    with flag_gems.use_gems():
+        res_out = torch.tan_(inp)
 
     gems_assert_close(res_out, ref_out, dtype)
 

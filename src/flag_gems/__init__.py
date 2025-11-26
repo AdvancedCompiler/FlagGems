@@ -97,6 +97,8 @@ def enable(
             ("contiguous", contiguous),
             ("cos", cos),
             ("cos_", cos_),
+            ("tan", tan),
+            ("tan_", tan_),
             ("count_nonzero", count_nonzero),
             ("cummax", cummax),
             ("cummin", cummin),
@@ -353,6 +355,8 @@ class use_gems:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         global current_work_registrar
+        if torch.__version__ >= "2.5":
+            self.lib._destroy()
         del self.lib
         del self.unused
         del self.registrar

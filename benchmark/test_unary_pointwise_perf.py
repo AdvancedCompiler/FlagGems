@@ -11,7 +11,7 @@ from benchmark.attri_util import (
     FLOAT_DTYPES,
     INT_DTYPES,
 )
-from benchmark.performance_utils import Benchmark, generate_tensor_input, vendor_name
+from benchmark.performance_utils import Benchmark, generate_tensor_input
 
 fp64_is_supported = flag_gems.runtime.device.support_fp64
 
@@ -65,6 +65,7 @@ forward_operations = [
     # Trigonometric operations
     ("cos", torch.cos, FLOAT_DTYPES),
     ("sin", torch.sin, FLOAT_DTYPES),
+    ("tan", torch.tan, FLOAT_DTYPES),
     ("tanh", torch.tanh, FLOAT_DTYPES),
     ("atan", torch.atan, FLOAT_DTYPES),
     # Bitwise operations
@@ -89,8 +90,6 @@ forward_operations = [
     ],
 )
 def test_general_unary_pointwise_perf(op_name, torch_op, dtypes):
-    if vendor_name == "mthreads" and op_name == "angle":
-        pytest.skip(" Unsupport complex dtype")
     bench = UnaryPointwiseBenchmark(op_name=op_name, torch_op=torch_op, dtypes=dtypes)
     bench.run()
 
@@ -114,6 +113,7 @@ forward_inplace_operations = [
     # Trigonometric operations
     ("cos_", torch.cos_, FLOAT_DTYPES),
     ("sin_", torch.sin_, FLOAT_DTYPES),
+    ("tan_", torch.tan_, FLOAT_DTYPES),
     ("tanh_", torch.tanh_, FLOAT_DTYPES),
     ("atan_", torch.atan_, FLOAT_DTYPES),
     # Bitwise operations
@@ -177,7 +177,7 @@ class ToCopyBenchmark(UnaryPointwiseBenchmark):
 @pytest.mark.to_copy
 def test_to_copy_perf():
     bench = ToCopyBenchmark(
-        op_name="_to_copy",
+        op_name="to_copy",
         torch_op=torch.ops.aten._to_copy,
         dtypes=[torch.float16, torch.bfloat16]
         + ([torch.float64] if fp64_is_supported else []),
