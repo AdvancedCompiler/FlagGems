@@ -26,8 +26,8 @@ at::Tensor full_like_cpp_scalar(const at::Tensor& x,
   }
 
   static const TritonJITFunction& full_kernel_func =
-      TritonJITFunction::getInstance(std::string(utils::get_triton_src_path() / "flag_gems/ops/full.py"),
-                                     "full_func_scalar");
+      TritonJITFunction::get_instance(std::string(utils::get_triton_src_path() / "flag_gems/ops/full.py"),
+                                      "full_func_scalar");
 
   c10::DeviceGuard guard(device);
   c10::cuda::CUDAStream stream = c10::cuda::getCurrentCUDAStream();
@@ -73,7 +73,7 @@ at::Tensor true_div(const at::Tensor& a, const at::Tensor& b) {
   at::Tensor out = at::empty(an.sizes(), at::TensorOptions().dtype(out_dtype).device(an.device()));
 
   const TritonJITFunction& f =
-      TritonJITFunction::getInstance((utils::get_triton_src_path() / "div.py").string(), "true_div_kernel");
+      TritonJITFunction::get_instance((utils::get_triton_src_path() / "div.py").string(), "true_div_kernel");
 
   int64_t tile_size = 1024;
   int64_t n = out.numel();
@@ -108,7 +108,7 @@ at::Tensor true_div_(at::Tensor& a_, const at::Tensor& b_) {
   at::Tensor out = at::empty_like(a_broadcast);
 
   const TritonJITFunction& f =
-      TritonJITFunction::getInstance((utils::get_triton_src_path() / "div.py").string(), "true_div_kernel_");
+      TritonJITFunction::get_instance((utils::get_triton_src_path() / "div.py").string(), "true_div_kernel_");
 
   int64_t tile_size = 1024;
   int num_blocks = (num + tile_size - 1) / tile_size;
@@ -151,8 +151,8 @@ at::Tensor trunc_div(const at::Tensor& a, const at::Tensor& b) {
   at::Tensor out = at::empty(an.sizes(), at::TensorOptions().dtype(out_dtype).device(an.device()));
 
   const TritonJITFunction& f =
-      TritonJITFunction::getInstance((utils::get_triton_src_path() / "div.py").string(),
-                                     "trunc_divide_kernel");
+      TritonJITFunction::get_instance((utils::get_triton_src_path() / "div.py").string(),
+                                      "trunc_divide_kernel");
 
   int64_t tile_size = 1024;
   int64_t n = out.numel();
@@ -185,8 +185,8 @@ at::Tensor trunc_div_(at::Tensor& a_, const at::Tensor& b_) {
 
   int64_t num = a.numel();
   const TritonJITFunction& f =
-      TritonJITFunction::getInstance((utils::get_triton_src_path() / "div.py").string(),
-                                     "trunc_divide_kernel_");
+      TritonJITFunction::get_instance((utils::get_triton_src_path() / "div.py").string(),
+                                      "trunc_divide_kernel_");
 
   int64_t tile_size = 1024;
   int num_blocks = (num + tile_size - 1) / tile_size;
@@ -215,7 +215,7 @@ at::Tensor launch_floor_div_kernel(const at::Tensor& a_, const at::Tensor& b_, b
 
   std::string kernel_name = use_integer_kernel ? INT_KERNEL_NAME : FLOAT_KERNEL_NAME;
   const TritonJITFunction& f =
-      TritonJITFunction::getInstance((utils::get_triton_src_path() / "div.py").string(), kernel_name);
+      TritonJITFunction::get_instance((utils::get_triton_src_path() / "div.py").string(), kernel_name);
 
   int64_t tile_size = 1024;
   int64_t n = out.numel();
@@ -282,7 +282,7 @@ at::Tensor launch_floor_div_kernel_(at::Tensor& a_, const at::Tensor& b_, bool u
 
   std::string kernel_name = use_integer_kernel ? "int_floordiv_kernel_" : "float_floordiv_kernel_";
   const TritonJITFunction& f =
-      TritonJITFunction::getInstance((utils::get_triton_src_path() / "div.py").string(), kernel_name);
+      TritonJITFunction::get_instance((utils::get_triton_src_path() / "div.py").string(), kernel_name);
 
   int64_t num = a.numel();
   int64_t N = a.numel() / a.size(0);
@@ -333,7 +333,7 @@ at::Tensor div_mode(const at::Tensor& a_,
     TORCH_CHECK(false, "div_mode rounding_mode must be 'floor', 'trunc', or empty.");
   }
   const TritonJITFunction& f =
-      TritonJITFunction::getInstance((utils::get_triton_src_path() / "div.py").string(), kernel_name);
+      TritonJITFunction::get_instance((utils::get_triton_src_path() / "div.py").string(), kernel_name);
 
   int64_t tile_size = 1024;
   int64_t n = out.numel();
@@ -379,7 +379,7 @@ at::Tensor div_mode_(at::Tensor& a_, const at::Tensor& b_, const c10::optional<s
   }
 
   const TritonJITFunction& f =
-      TritonJITFunction::getInstance((utils::get_triton_src_path() / "div.py").string(), kernel_name);
+      TritonJITFunction::get_instance((utils::get_triton_src_path() / "div.py").string(), kernel_name);
 
   TORCH_CHECK(a.dim() >= 2, "div_mode_: requires at least 2D input");
   int64_t num = a.numel();
@@ -407,7 +407,7 @@ at::Tensor remainder_tt(const at::Tensor& a_, const at::Tensor& b_) {
   at::Tensor out = at::empty_like(a, at::TensorOptions().dtype(a.scalar_type()));
 
   const TritonJITFunction& f =
-      TritonJITFunction::getInstance((utils::get_triton_src_path() / "div.py").string(), "remainder_kernel");
+      TritonJITFunction::get_instance((utils::get_triton_src_path() / "div.py").string(), "remainder_kernel");
 
   int64_t tile_size = 1024;
   int64_t n = out.numel();
