@@ -1302,7 +1302,8 @@ def test_accuracy_per_token_group_quant_fp8(num_tokens, d, dtype, group_size, se
     out_fp32 = to_cpu(out, ref_out).to(torch.float32)
     ref_out_fp32 = ref_out.to(torch.float32)
     assert torch.allclose(out_fp32, ref_out_fp32, rtol=0.15)
-    
+
+
 @pytest.mark.rwkv_ka_fusion
 @pytest.mark.parametrize("T", [2**d for d in range(4, 15, 2)])
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
