@@ -15,39 +15,55 @@ from flag_gems.utils.shape_utils import volume
 device_ = device
 logger = logging.getLogger(__name__)
 
-
-@triton.jit
-def fast_cos_ptx(x):
-    return tl.inline_asm_elementwise(
-        "cos.approx.ftz.f32 $0, $1;",
-        "=f,f",
-        [x],
-        dtype=tl.float32,
-        is_pure=True,
-        pack=1,
-    )
-
-
-@triton.jit
-def fast_sin_ptx(x):
-    return tl.inline_asm_elementwise(
-        "sin.approx.ftz.f32 $0, $1;",
-        "=f,f",
-        [x],
-        dtype=tl.float32,
-        is_pure=True,
-        pack=1,
-    )
+if device_.vendor == runtime.commom_utils.vendors.NVIDIA:
+    @triton.jit
+    def fast_cos_ptx(x):
+        return tl.inline_asm_elementwise(
+            "cos.approx.ftz.f32 $0, $1;",
+            "=f,f",
+            [x],
+            dtype=tl.float32,
+            is_pure=True,
+            pack=1,
+        )
 
 
-@triton.jit
-def fast_box_muller_ptx(u1, u2):
-    u1 = tl.maximum(1.0e-7, u1)
-    th = 6.283185307179586 * u2
+    @triton.jit
+    def fast_sin_ptx(x):
+        return tl.inline_asm_elementwise(
+            "sin.approx.ftz.f32 $0, $1;",
+            "=f,f",
+            [x],
+            dtype=tl.float32,
+            is_pure=True,
+            pack=1,
+        )
 
-    r = tl.sqrt(-2.0 * tl.log(u1))
 
-    return r * fast_cos_ptx(th), r * fast_sin_ptx(th)
+    @triton.jit
+    def fast_box_muller_ptx(u1, u2):
+        u1 = tl.maximum(1.0e-7, u1)
+        th = 6.283185307179586 * u2
+
+        r = tl.sqrt(-2.0 * tl.log(u1))
+
+        return r * fast_cos_ptx(th), r * fast_sin_ptx(th)
+    
+    pair_uniform_to_normal = fast_box_muller_ptx
+
+else:
+    try:
+        pair_uniform_to_normal = tl.pair_uniform_to_normal
+    except AttributeError:
+
+        @triton.jit
+        def pair_uniform_to_normal(u1, u2):
+            """Box-Muller transform"""
+            u1 = tl.maximum(1.0e-7, u1)
+            th = 6.283185307179586 * u2
+            r = tl.sqrt(-2.0 * tl.log(u1))
+            return r * tl.cos(th), r * tl.sin(th)
+
 
 
 @triton.heuristics(runtime.get_heuristic_config("randn"))
@@ -75,8 +91,8 @@ def randn_kernel(
     r2 = uint_to_uniform_float(r2)
     r3 = uint_to_uniform_float(r3)
 
-    n0, n1 = fast_box_muller_ptx(r0, r1)
-    n2, n3 = fast_box_muller_ptx(r2, r3)
+    n0, n1 = pair_uniform_to_normal(r0, r1)
+    n2, n3 = pair_uniform_to_normal(r2, r3)
 
     n_01 = tl.cat(n0, n1, can_reorder=True)
     n_23 = tl.cat(n2, n3, can_reorder=True)
