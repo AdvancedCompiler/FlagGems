@@ -36,8 +36,8 @@ std::tuple<at::Tensor, at::Tensor> radix_sort(const at::Tensor& arr, int64_t k_b
   unsigned int grid_x_hist = m * grid_n_hist;
 
   const TritonJITFunction& hist_kernel =
-      TritonJITFunction::getInstance(std::string(utils::get_flag_gems_src_path() / "ops" / "sort.py"),
-                                     "compute_global_hist_kernel");
+      TritonJITFunction::get_instance(std::string(utils::get_flag_gems_src_path() / "ops" / "sort.py"),
+                                      "compute_global_hist_kernel");
 
   c10::DeviceGuard guard(arr.device());
   c10::cuda::CUDAStream stream = c10::cuda::getCurrentCUDAStream();
@@ -84,8 +84,8 @@ std::tuple<at::Tensor, at::Tensor> radix_sort(const at::Tensor& arr, int64_t k_b
       at::empty({m, num_bins, grid_n_sweep}, at::TensorOptions().device(arr.device()).dtype(torch::kInt32));
 
   const TritonJITFunction& sweep_kernel =
-      TritonJITFunction::getInstance(std::string(utils::get_flag_gems_src_path() / "ops" / "sort.py"),
-                                     "sweep");
+      TritonJITFunction::get_instance(std::string(utils::get_flag_gems_src_path() / "ops" / "sort.py"),
+                                      "sweep");
 
   for (int64_t i = 0; i < n_passes; ++i) {
     int64_t bit_offset = i * k_bits;
@@ -120,7 +120,10 @@ std::tuple<at::Tensor, at::Tensor> radix_sort(const at::Tensor& arr, int64_t k_b
   return std::make_tuple(arr_in, indices_in);
 }
 
-std::tuple<at::Tensor, at::Tensor> sort_stable(const at::Tensor& inp,  c10::optional<bool> stable, int64_t dim, bool descending){
+std::tuple<at::Tensor, at::Tensor> sort_stable(const at::Tensor& inp,
+                                               c10::optional<bool> stable,
+                                               int64_t dim,
+                                               bool descending) {
   if (inp.numel() == 0) {
     at::Tensor empty_out = at::empty_like(inp);
     at::Tensor empty_idx = at::empty_like(inp, at::TensorOptions().dtype(torch::kInt64));
