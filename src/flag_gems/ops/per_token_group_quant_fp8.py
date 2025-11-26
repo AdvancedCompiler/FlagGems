@@ -7,7 +7,7 @@ import triton.language as tl
 if torch.cuda.is_available() and torch.cuda.get_device_capability() >= (9, 0):
     SUPPORTED_FP8_DTYPE = torch.float8_e4m3fn
 else:
-    SUPPORTED_FP8_DTYPE = torch.float8_e5m2
+    SUPPORTED_FP8_DTYPE = torch.float32
 
 
 @triton.jit
