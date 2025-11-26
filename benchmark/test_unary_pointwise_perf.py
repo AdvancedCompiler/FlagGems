@@ -279,72 +279,115 @@ def test_bitwise_right_shift_perf():
     bench.run()
 
 
-class GeGLUForwardBenchmark(Benchmark):
+class TexGluBenchmark(Benchmark):
     DEFAULT_METRICS = DEFAULT_METRICS[:] + ["tflops"]
 
     def set_more_shapes(self):
-        # last dim must be even for GEGLU
+        # Last dim must be even for GLU operations to split
         special_shapes_2d = [(1024, 2**i) for i in range(1, 20, 4)]
         sp_shapes_3d = [(64, 64, 2**i) for i in range(1, 15, 4)]
         return special_shapes_2d + sp_shapes_3d
 
+
+class TexGluForwardBenchmark(TexGluBenchmark):
     def get_input_iter(self, cur_dtype):
         for shape in self.shapes:
             x = generate_tensor_input(shape, cur_dtype, self.device)
-            # must pass quantizer=None
+            # TE GLU APIs typically accept (input, quantizer).
             yield (x, None)
 
     def get_tflops(self, op, *args, **kwargs):
+        # args[0] is the input tensor x
         shape = list(args[0].shape)
         return torch.tensor(shape).prod().item()
 
 
-@pytest.mark.geglu
-def test_geglu_perf():
-    if not TE_AVAILABLE:
-        pytest.skip("TransformerEngine not installed")
-
-    bench = GeGLUForwardBenchmark(
-        op_name="geglu",
-        torch_op=tex.geglu,
-        dtypes=FLOAT_DTYPES,
-    )
-    bench.run()
-
-
-class DGeGLUBackwardBenchmark(Benchmark):
-    DEFAULT_METRICS = DEFAULT_METRICS[:] + ["tflops"]
-
-    def set_more_shapes(self):
-        # last dim must be even
-        special_shapes_2d = [(1024, 2**i) for i in range(1, 20, 4)]
-        sp_shapes_3d = [(64, 64, 2**i) for i in range(1, 15, 4)]
-        return special_shapes_2d + sp_shapes_3d
-
+class TexGluBackwardBenchmark(TexGluBenchmark):
     def get_input_iter(self, cur_dtype):
         for shape in self.shapes:
             inp = generate_tensor_input(shape, cur_dtype, self.device)
-            # GEGLU output: last dim = input_last_dim // 2
+
             out_shape = list(shape)
             out_shape[-1] = out_shape[-1] // 2
+
             grad_out = torch.randn(out_shape, dtype=cur_dtype, device=self.device)
 
             yield grad_out, inp, None
 
     def get_tflops(self, op, *args, **kwargs):
-        # A proxy FLOPs estimate
+        # args[1] is the original input tensor 'inp'
         inp_shape = list(args[1].shape)
+        # Proxy FLOPs estimate: forward + backward cost roughly approximated
         return torch.tensor(inp_shape).prod().item() * 2
 
 
-@pytest.mark.dgeglu
-def test_dgeglu_perf():
+glu_forward_ops = [
+    ("geglu", "geglu", FLOAT_DTYPES),
+    # ("swiglu", "swiglu", FLOAT_DTYPES),
+    # ("reglu", "reglu", FLOAT_DTYPES),
+]
+
+glu_backward_ops = [
+    ("dgeglu", "dgeglu", FLOAT_DTYPES),
+    # ("dswiglu", "dswiglu", FLOAT_DTYPES),
+    # ("dreglu", "dreglu", FLOAT_DTYPES),
+]
+
+
+@pytest.mark.parametrize(
+    "op_name, tex_attr_name, dtypes",
+    [
+        pytest.param(
+            name,
+            tex_attr,
+            dtype,
+            marks=getattr(pytest.mark, name, None),
+        )
+        for name, tex_attr, dtype in glu_forward_ops
+    ],
+)
+def test_tex_glu_forward_perf(op_name, tex_attr_name, dtypes):
     if not TE_AVAILABLE:
         pytest.skip("TransformerEngine not installed")
 
-    bench = DGeGLUBackwardBenchmark(
-        op_name="dgeglu",
-        torch_op=tex.dgeglu,
-        dtypes=FLOAT_DTYPES,
+    if not hasattr(tex, tex_attr_name):
+        pytest.skip(f"Operator {tex_attr_name} not found in transformer_engine")
+
+    te_op = getattr(tex, tex_attr_name)
+
+    bench = TexGluForwardBenchmark(
+        op_name=op_name,
+        torch_op=te_op,
+        dtypes=dtypes,
+    )
+    bench.run()
+
+
+@pytest.mark.parametrize(
+    "op_name, tex_attr_name, dtypes",
+    [
+        pytest.param(
+            name,
+            tex_attr,
+            dtype,
+            marks=getattr(pytest.mark, name, None),
+        )
+        for name, tex_attr, dtype in glu_backward_ops
+    ],
+)
+def test_tex_glu_backward_perf(op_name, tex_attr_name, dtypes):
+    if not TE_AVAILABLE:
+        pytest.skip("TransformerEngine not installed")
+
+    if not hasattr(tex, tex_attr_name):
+        pytest.skip(f"Operator {tex_attr_name} not found in transformer_engine")
+
+    te_op = getattr(tex, tex_attr_name)
+
+    bench = TexGluBackwardBenchmark(
+        op_name=op_name,
+        torch_op=te_op,
+        dtypes=dtypes,
+        is_backward=False,
     )
     bench.run()
