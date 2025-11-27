@@ -64,7 +64,9 @@ TORCH_LIBRARY(flag_gems, m) {
   m.def("argmax(Tensor self, int? dim=None, bool keepdim=False) -> Tensor");
   // sort
   m.def("sort(Tensor self, int dim=-1, bool descending=False) -> (Tensor values, Tensor indices)");
-  m.def("sort.stable(Tensor self, *, bool? stable, int dim=-1, bool descending=False) -> (Tensor values, Tensor indices)");
+  m.def(
+      "sort.stable(Tensor self, *, bool? stable, int dim=-1, bool descending=False) -> (Tensor values, "
+      "Tensor indices)");
 
   m.def("fill.Scalar(Tensor self, Scalar value) -> Tensor");
   m.def("fill.Tensor(Tensor self, Tensor value) -> Tensor");
