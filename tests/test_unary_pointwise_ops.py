@@ -312,12 +312,8 @@ def test_accuracy_exp2_(shape, dtype):
 @pytest.mark.geglu
 @pytest.mark.parametrize("shape", POINTWISE_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+@pytest.mark.skipif(not TE_AVAILABLE, reason="transformer engine is not available")
 def test_accuracy_geglu(shape, dtype):
-    if not TE_AVAILABLE:
-        pytest.skip(
-            "Transformer Engine backend (cpp_extensions) not available for reference."
-        )
-
     if len(shape) == 0:
         pytest.skip("GEGLU does not support 0-dim scalar tensors.")
 
@@ -338,12 +334,8 @@ def test_accuracy_geglu(shape, dtype):
 @pytest.mark.dreglu
 @pytest.mark.parametrize("shape", POINTWISE_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+@pytest.mark.skipif(not TE_AVAILABLE, reason="transformer engine is not available")
 def test_accuracy_dreglu(shape, dtype):
-    if not TE_AVAILABLE:
-        pytest.skip(
-            "Transformer Engine backend (cpp_extensions) not available for reference."
-        )
-
     if len(shape) == 0:
         pytest.skip("dreglu does not support 0-dim scalar tensors.")
 

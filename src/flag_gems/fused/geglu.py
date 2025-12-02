@@ -35,7 +35,6 @@ def geglu_kernel(
 
     mask = (offs_m[:, None] < M) & (offs_h[None, :] < H)
 
-    # input 切分为 x_a, x_b
     input_a_ptr = (
         input_ptr + offs_m[:, None] * stride_in_m + offs_h[None, :] * stride_in_h
     )
@@ -105,7 +104,6 @@ def dgeglu_kernel(
     x_a = tl.load(input_a_ptr, mask=mask, other=0.0).to(tl.float32)
     x_b = tl.load(input_b_ptr, mask=mask, other=0.0).to(tl.float32)
 
-    # GELU 公式及其导数
     tanh_out = tanh(0.79788456 * x_a * (1 + 0.044715 * pow(x_a, 2)))
     gelu_out = 0.5 * x_a * (1 + tanh_out)
 
@@ -115,7 +113,6 @@ def dgeglu_kernel(
         1 + 3 * 0.044715 * pow(x_a, 2)
     )
 
-    # 反向传播
     grad_a = grad_out * x_b * dgelu
     grad_b = grad_out * gelu_out
 
@@ -148,7 +145,7 @@ def geglu(input_tensor: torch.Tensor) -> torch.Tensor:
         BLOCK_SIZE_M=64,
         BLOCK_SIZE_H=64,
     )
-
+    # print("geglu")
     return output_2d.view(*shape[:-1], H)
 
 
@@ -181,5 +178,5 @@ def dgeglu(grad_output: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tenso
         BLOCK_SIZE_M=64,
         BLOCK_SIZE_H=64,
     )
-
+    # print(dgeglu)
     return grad_in_2d.view_as(input_tensor)
