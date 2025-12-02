@@ -1314,6 +1314,7 @@ K_VALUES = [128, 511, 1024]
 MOE_SHAPES = list(itertools.product(M_VALUES, TOP_KS, K_VALUES))
 
 
+@pytest.mark.moe_sum
 @pytest.mark.parametrize("shape", MOE_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_moe_sum(shape, dtype):
