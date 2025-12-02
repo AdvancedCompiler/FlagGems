@@ -4,15 +4,9 @@ import torch
 import triton
 import triton.language as tl
 
-from ..utils import pointwise_dynamic, tl_extra_shim
+from flag_gems.utils import pointwise_dynamic
+from flag_gems.utils.triton_lang_extension import div_rn, div_rz, fmod, trunc
 
-div_rn = tl_extra_shim.div_rn
-try:
-    import torch_npu  # noqa: F401
-except:  # noqa: E722
-    div_rz = tl_extra_shim.div_rz
-    fmod = tl_extra_shim.fmod
-    trunc = tl_extra_shim.trunc
 logger = logging.getLogger(__name__)
 
 
@@ -246,7 +240,7 @@ def rem_st(x, y):
 
 
 def remainder(A, B):
-    logger.debug("GEMS FLOOR_DIVIDE")
+    logger.debug("GEMS REMAINDER")
     if isinstance(A, torch.Tensor) and isinstance(B, torch.Tensor):
         return rem_tt(A, B)
     elif isinstance(A, torch.Tensor):

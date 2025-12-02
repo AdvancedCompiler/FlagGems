@@ -1,16 +1,17 @@
 import importlib
+import random
 
+import numpy as np
 import torch
 from packaging import version
 
 
-def has_c_extension() -> bool:
-    try:
-        import flag_gems.ext_ops  # noqa: F401
-
-        return True
-    except ImportError:
-        return False
+def init_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
 
 def is_torch_version_ge(min_ver: str) -> bool:

@@ -5,9 +5,9 @@ import torch
 import triton
 import triton.language as tl
 
-from ..runtime import torch_device_fn
-from ..utils import libentry
-from ..utils import triton_lang_extension as tle
+from flag_gems.runtime import torch_device_fn
+from flag_gems.utils import libentry
+from flag_gems.utils import triton_lang_extension as tle
 
 logger = logging.getLogger(__name__)
 
@@ -15,10 +15,10 @@ logger = logging.getLogger(__name__)
 @libentry()
 @triton.jit(do_not_specialize=["eps"])
 def rms_norm_kernel(
-    Y,  # pointer to the output
+    out_ptr,  # pointer to the output
     INV_RMS,  # pointer to inverse rms
-    X,  # pointer to the input
-    W,  # pointer to the weights
+    in_ptr,  # pointer to the input
+    w_ptr,  # pointer to the weights
     y_stride_r,
     y_stride_c,
     x_stride_r,  # how much to increase the pointer when moving by 1 row
@@ -27,20 +27,27 @@ def rms_norm_kernel(
     eps,  # epsilon to avoid division by zero
     BLOCK_SIZE: tl.constexpr,
 ):
-    pid = tle.program_id(0)
-    Y += pid * y_stride_r
-    X += pid * x_stride_r
+    if tl.constexpr(in_ptr.dtype.element_ty == tl.float16) or tl.constexpr(
+        in_ptr.dtype.element_ty == tl.bfloat16
+    ):
+        cdtype = tl.float32
+    else:
+        cdtype = in_ptr.dtype.element_ty
+
+    pid = tl.program_id(0)
+    out_ptr += pid * y_stride_r
+    in_ptr += pid * x_stride_r
 
     mask = tl.arange(0, BLOCK_SIZE) < N
     cols = tl.arange(0, BLOCK_SIZE)
-    x = tl.load(X + cols * x_stride_c, mask, other=0.0).to(tl.float32)
+    x = tl.load(in_ptr + cols * x_stride_c, mask, other=0.0).to(cdtype)
 
     var = tl.sum(x * x, axis=0) / N
     rrms = 1 / tl.sqrt(var + eps)
 
-    w = tl.load(W + tl.arange(0, BLOCK_SIZE), mask=mask, other=0.0)
-    y = (x * rrms).to(Y.dtype.element_ty) * w
-    tl.store(Y + cols * y_stride_c, y, mask=mask)
+    w = tl.load(w_ptr + tl.arange(0, BLOCK_SIZE), mask=mask, other=0.0)
+    y = (x * rrms * w).to(cdtype)
+    tl.store(out_ptr + cols * y_stride_c, y, mask=mask)
     tl.store(INV_RMS + pid, rrms)
 
 
@@ -130,6 +137,8 @@ def rms_norm_grad_dw_kernel(
     ).to(tl.float32)
 
     d_weight = x * dy * inv_rms[:, None]
+    # Sum over rows (axis=0) - masked rows are 0 (from other=0.0 in load), so sum is correct
+    # The mask ensures invalid rows contribute 0 to the sum
     partial_dweight_sum = tl.sum(d_weight, axis=0)
 
     tl.store(
@@ -174,6 +183,7 @@ class RmsNorm(torch.autograd.Function):
 
         BLOCK_SIZE = triton.next_power_of_2(N)
         x = x.contiguous()
+        dy = dy.contiguous()
         weight = weight.contiguous()
         dx = torch.empty_like(x)
 
@@ -187,7 +197,7 @@ class RmsNorm(torch.autograd.Function):
         row_block_num = triton.cdiv(M, ROW_BLOCK_SIZE)
         col_block_num = triton.cdiv(N, COL_BLOCK_SIZE)
 
-        partial_buffer = torch.empty(
+        partial_buffer = torch.zeros(
             (row_block_num, N), dtype=torch.float32, device=x.device
         )
 
@@ -206,7 +216,11 @@ class RmsNorm(torch.autograd.Function):
                 ROW_BLOCK_SIZE,
                 COL_BLOCK_SIZE,
             )
-            dw = torch.sum(partial_buffer, dim=0, dtype=x.dtype).reshape(-1)
+            dw = (
+                torch.sum(partial_buffer, dim=0, dtype=torch.float32)
+                .to(x.dtype)
+                .reshape(-1)
+            )
 
         return dx, None, dw, None
 
