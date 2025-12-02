@@ -67,15 +67,11 @@ def _per_token_group_quant_fp8_colmajor(
 
     g_id = tl.program_id(0)
     row = g_id // groups_per_row
-    row_g_id = g_id % groups_per_row
+    group_id = g_id % groups_per_row
 
-    y_ptr += (row * y_row_stride) + (row_g_id * group_size)
+    y_ptr += row * y_row_stride + group_id * group_size
     y_q_ptr += g_id * group_size
-
-    blocks_per_row = y_num_columns // group_size
-    scale_col = g_id % blocks_per_row
-    scale_row = g_id // blocks_per_row
-    y_s_ptr += scale_col * y_s_col_stride + scale_row
+    y_s_ptr += group_id * y_s_col_stride + row
 
     cols = tl.arange(0, BLOCK)
     mask = cols < group_size
