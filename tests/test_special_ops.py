@@ -654,7 +654,11 @@ def test_linspace(start, end, steps, dtype, device, pin_memory):
 @pytest.mark.parametrize("device", [device])
 @pytest.mark.parametrize("pin_memory", [False])
 def test_logspace(start, end, steps, base, dtype, device, pin_memory):
-    if flag_gems.vendor_name == "kunlunxin" and dtype is torch.half:
+    if (
+        flag_gems.vendor_name == "kunlunxin"
+        and dtype is torch.half
+        and torch.__version__ < "2.5"
+    ):
         pytest.skip("wait lerp cpu half impl")
 
     ref_out = torch.logspace(
@@ -1163,7 +1167,6 @@ def test_accuracy_diagonal_backward(shape, dtype, dim1, dim2, offset):
 
 
 @pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RESULT TODOFIX")
-@pytest.mark.skipif(flag_gems.vendor_name == "kunlunxin", reason="RESULT TODOFIX")
 @pytest.mark.sort
 @pytest.mark.parametrize("batch_size", [4, 8])
 @pytest.mark.parametrize(
@@ -1299,6 +1302,15 @@ def test_accuracy_rwkv_mmsparsity(dtype):
 
     k = torch.randn(n, dtype=dtype, device=flag_gems.device)
     k = torch.relu(k)
+    if flag_gems.vendor_name == "kunlunxin":
+        # kunlunxin sparsity test require 90% sparsity
+        sparsity_levels = [0.9]
+        for target_sparsity in sparsity_levels:
+            threshold = torch.quantile(k.abs().to(torch.float32), target_sparsity).to(
+                dtype
+            )
+            k = torch.relu(k - threshold)
+
     V_ = torch.randn(n, embedding_dim, dtype=dtype, device=flag_gems.device)
 
     with flag_gems.use_gems():
@@ -1309,3 +1321,23 @@ def test_accuracy_rwkv_mmsparsity(dtype):
     ref_res = ref_k @ ref_V_
 
     gems_assert_close(res, ref_res, dtype, equal_nan=True)
+
+
+M_VALUES = [1, 33, 64, 222]
+TOP_KS = [2, 6]
+K_VALUES = [128, 511, 1024]
+MOE_SHAPES = list(itertools.product(M_VALUES, TOP_KS, K_VALUES))
+
+
+@pytest.mark.moe_sum
+@pytest.mark.parametrize("shape", MOE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_moe_sum(shape, dtype):
+    m, topk, k = shape
+    inp1 = torch.randn((m, topk, k), dtype=dtype, device=flag_gems.device)
+    res_out = torch.empty((m, k), dtype=dtype, device=flag_gems.device)
+    ref_inp1 = to_reference(inp1)
+    ref_out = torch.sum(ref_inp1, dim=1)
+    with flag_gems.use_gems():
+        flag_gems.moe_sum(inp1, res_out)
+    gems_assert_close(res_out, ref_out, dtype)

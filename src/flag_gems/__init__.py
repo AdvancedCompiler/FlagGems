@@ -12,7 +12,7 @@ from flag_gems.ops import *  # noqa: F403
 from flag_gems.patches import *  # noqa: F403
 from flag_gems.runtime.register import Register
 
-__version__ = "3.0"
+__version__ = "4.1"
 device = runtime.device.name
 vendor_name = runtime.device.vendor_name
 aten_lib = torch.library.Library("aten", "IMPL")
@@ -42,6 +42,7 @@ def enable(
             ("_upsample_bicubic2d_aa", _upsample_bicubic2d_aa),
             ("_weight_norm_interface", weight_norm_interface),
             ("_weight_norm_interface_backward", weight_norm_interface_backward),
+            ("moe_sum", moe_sum),
             ("abs", abs),
             ("abs_", abs_),
             ("add.Tensor", add),
@@ -95,7 +96,8 @@ def enable(
             ("clamp_.Tensor", clamp_tensor_),
             ("clamp_min_", clamp_min_),
             ("constant_pad_nd", constant_pad_nd),
-            ("contiguous", contiguous),
+            # ("contiguous", contiguous),
+            ("copy_", copy_),
             ("cos", cos),
             ("cos_", cos_),
             ("tan", tan),
