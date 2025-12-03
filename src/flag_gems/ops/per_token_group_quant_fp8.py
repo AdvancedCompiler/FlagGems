@@ -22,8 +22,6 @@ def _per_token_group_quant_fp8(
     fp8_min,
     fp8_max,
     BLOCK: tl.constexpr,
-    num_warps: tl.constexpr,
-    num_stages: tl.constexpr,
 ):
     groups_per_row = y_num_columns // group_size
 
@@ -60,8 +58,6 @@ def _per_token_group_quant_fp8_colmajor(
     fp8_min,
     fp8_max,
     BLOCK: tl.constexpr,
-    num_warps: tl.constexpr,
-    num_stages: tl.constexpr,
 ):
     groups_per_row = y_num_columns // group_size
 
