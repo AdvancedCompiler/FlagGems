@@ -29,10 +29,10 @@ std::tuple<at::Tensor, at::Tensor> radix_sort(const at::Tensor& arr, int64_t k_b
   const int64_t CTA_TILE_N_HIST = TILES_N_PER_CTA_HIST * TILE_N_HIST;
 
   const int64_t num_bins = 1 << k_bits;
-  const int64_t n_passes = (num_bits + k_bits - 1) / k_bits;
+  const int64_t n_passes = utils::cdiv(num_bits, k_bits);
   const int64_t TILE_R_HIST = 16;
 
-  int64_t grid_n_hist = (n + CTA_TILE_N_HIST - 1) / CTA_TILE_N_HIST;
+  int64_t grid_n_hist = utils::cdiv(n, CTA_TILE_N_HIST);
   unsigned int grid_x_hist = m * grid_n_hist;
 
   const TritonJITFunction& hist_kernel =
@@ -75,8 +75,8 @@ std::tuple<at::Tensor, at::Tensor> radix_sort(const at::Tensor& arr, int64_t k_b
 
   const int64_t TILE_R_SWEEP = 8;
   const int64_t TILE_N_SWEEP = 2048;
-  int64_t grid_r_sweep = (num_bins + TILE_R_SWEEP - 1) / TILE_R_SWEEP;
-  int64_t grid_n_sweep = (n + TILE_N_SWEEP - 1) / TILE_N_SWEEP;
+  int64_t grid_r_sweep = utils::cdiv(num_bins, TILE_R_SWEEP);
+  int64_t grid_n_sweep = utils::cdiv(n, TILE_N_SWEEP);
   unsigned int grid_x_sweep = m * grid_n_sweep;
   unsigned int grid_y_sweep = grid_r_sweep;
 
