@@ -106,6 +106,13 @@ TEST(blas_op_test, remainder) {
   auto out_triton = flag_gems::remainder(a, b);
 
   EXPECT_TRUE(torch::allclose(out_torch, out_triton, 1e-4, 1e-6));
+
+  torch::Tensor a_int = torch::randint(-100, 100, {8, 8}, device);
+  torch::Tensor b_int = torch::randint(1, 50, {8, 8}, device);
+  auto out_torch_int = torch::remainder(a_int, b_int);
+  auto out_triton_int = flag_gems::remainder(a_int, b_int);
+
+  EXPECT_TRUE(torch::allclose(out_torch_int, out_triton_int, 1e-6, 1e-6));
 }
 
 TEST(blas_op_test, remainder_) {

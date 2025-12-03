@@ -401,7 +401,6 @@ at::Tensor remainder_tt(const at::Tensor& a_, const at::Tensor& b_) {
   auto res = torch::broadcast_tensors({a_, b_});
   at::Tensor a = res[0].contiguous();
   at::Tensor b = res[1].contiguous();
-
   TORCH_CHECK(a.sizes() == b.sizes(), "Broadcast failed");
 
   at::Tensor out = at::empty_like(a, at::TensorOptions().dtype(a.scalar_type()));
