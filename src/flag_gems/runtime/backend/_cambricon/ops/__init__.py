@@ -27,7 +27,7 @@ from .clamp import clamp, clamp_, clamp_tensor, clamp_tensor_
 from .cos import cos, cos_
 from .count_nonzero import count_nonzero
 from .cummin import cummin
-from .cumsum import cumsum, normed_cumsum
+from .cumsum import cumsum, cumsum_out, normed_cumsum
 from .diag import diag
 from .diag_embed import diag_embed
 from .diagonal import diagonal_backward
@@ -81,7 +81,7 @@ from .maximum import maximum
 from .mean import mean, mean_dim
 from .min import min, min_dim
 from .minimum import minimum
-from .mm import mm
+from .mm import mm, mm_out
 from .mul import mul, mul_
 from .multinomial import multinomial
 from .mv import mv
@@ -117,13 +117,15 @@ from .resolve_neg import resolve_neg
 from .rms_norm import rms_norm
 from .rsqrt import rsqrt, rsqrt_
 from .scatter import scatter, scatter_
+from .select_scatter import select_scatter
 from .sigmoid import sigmoid, sigmoid_, sigmoid_backward
 from .silu import silu, silu_, silu_backward
 from .sin import sin, sin_
+from .slice_scatter import slice_scatter
 from .softmax import softmax, softmax_backward
 from .stack import stack
 from .sub import sub, sub_
-from .sum import sum, sum_dim
+from .sum import sum, sum_dim, sum_dim_out, sum_out
 from .tanh import tanh, tanh_, tanh_backward
 from .tile import tile
 from .topk import topk
@@ -182,6 +184,7 @@ __all__ = [
     "constant_pad_nd",
     "cummin",
     "cumsum",
+    "cumsum_out",
     "normed_cumsum",
     "true_divide",
     "true_divide_",
@@ -243,6 +246,7 @@ __all__ = [
     "mean",
     "mean_dim",
     "mm",
+    "mm_out",
     "mul",
     "mul_",
     "multinomial",
@@ -276,6 +280,7 @@ __all__ = [
     "rsqrt_",
     "scatter",
     "scatter_",
+    "select_scatter",
     "sigmoid",
     "sigmoid_",
     "sigmoid_backward",
@@ -284,6 +289,7 @@ __all__ = [
     "silu_backward",
     "sin",
     "sin_",
+    "slice_scatter",
     "softmax",
     "softmax_backward",
     "sub",
@@ -300,6 +306,8 @@ __all__ = [
     "min_dim",
     "sum",
     "sum_dim",
+    "sum_dim_out",
+    "sum_out",
     "amax",
     "argmax",
     "prod",

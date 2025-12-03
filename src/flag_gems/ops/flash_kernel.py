@@ -254,12 +254,15 @@ def is_even_mn_spec_args(args):
     return False
 
 
-def keep(cfg):
+def keep(cfg, must_keep=None):
     BM = cfg.kwargs["BLOCK_M"]
     BN = cfg.kwargs["BLOCK_N"]
     w = cfg.num_warps
 
-    return (BM, BN, w) in ((128, 32, 4), (128, 128, 8))
+    # we always keep configurations in `must_keep`
+    return (BM, BN, w) in ((128, 32, 4), (128, 128, 8)) or (
+        must_keep and cfg in must_keep
+    )
 
 
 def prune_fwd_configs(configs, nargs, **kwargs):
@@ -272,6 +275,10 @@ def prune_fwd_configs(configs, nargs, **kwargs):
         return configs
 
 
+def flash_fwd_kernel_heur_block_k(args):
+    return triton.next_power_of_2(args["d"])
+
+
 @libentry()
 @triton.autotune(
     configs=list(filter(keep, runtime.get_tuned_config("attention"))),
@@ -280,6 +287,7 @@ def prune_fwd_configs(configs, nargs, **kwargs):
 )
 @triton.heuristics(
     values={
+        "BLOCK_K": flash_fwd_kernel_heur_block_k,
         "PRE_LOAD_V": lambda args: False,
         "IS_EVEN_MN": lambda args: is_even_mn(
             args["seqlen_q"],
@@ -363,6 +371,7 @@ def flash_fwd_kernel(
     PRE_LOAD_V: tl.constexpr,
     BLOCK_M: tl.constexpr,
     BLOCK_N: tl.constexpr,
+    BLOCK_K: tl.constexpr,
     num_warps: tl.constexpr,
     num_stages: tl.constexpr,
 ):
@@ -421,9 +430,10 @@ def flash_fwd_kernel(
     q_ptr += bid * q_batch_stride + hid * q_head_stride
     row_start = m_block * BLOCK_M
     row_idx = row_start + tl.arange(0, BLOCK_M)
-    q_off = row_idx[:, None] * q_row_stride + tl.arange(0, d)[None, :]
-    qmask = row_idx[:, None] < seqlen_q
-    if IS_EVEN_MN:
+    q_off = row_idx[:, None] * q_row_stride + tl.arange(0, BLOCK_K)[None, :]
+    dmask = tl.arange(0, BLOCK_K) < d
+    qmask = dmask[None, :] & (row_idx[:, None] < seqlen_q)
+    if IS_EVEN_MN & d == BLOCK_K:
         Q = tl.load(q_ptr + q_off, cache_modifier=".cg")
     else:
         Q = tl.load(q_ptr + q_off, mask=qmask, cache_modifier=".cg")
@@ -437,7 +447,7 @@ def flash_fwd_kernel(
         )
         p_bp0 = p_ptr + p_offset
 
-    acc_ = tl.zeros((BLOCK_M, d), dtype=tl.float32)
+    acc_ = tl.zeros((BLOCK_M, BLOCK_K), dtype=tl.float32)
     rowmax_ = tl.full([BLOCK_M], float("-inf"), dtype=tl.float32)
     rowsum_ = tl.zeros([BLOCK_M], dtype=tl.float32)
 
@@ -448,8 +458,12 @@ def flash_fwd_kernel(
     v_ptr += bid * k_batch_stride
     v_ptr += (hid // h_hk_ratio) * k_head_stride
 
-    k_offset = tl.arange(0, BLOCK_N)[None, :] * k_row_stride + tl.arange(0, d)[:, None]
-    v_offset = tl.arange(0, BLOCK_N)[:, None] * k_row_stride + tl.arange(0, d)[None, :]
+    k_offset = (
+        tl.arange(0, BLOCK_N)[None, :] * k_row_stride + tl.arange(0, BLOCK_K)[:, None]
+    )
+    v_offset = (
+        tl.arange(0, BLOCK_N)[:, None] * k_row_stride + tl.arange(0, BLOCK_K)[None, :]
+    )
 
     p_bk0 = k_ptr + k_offset
     p_bv0 = v_ptr + v_offset
@@ -461,16 +475,30 @@ def flash_fwd_kernel(
             col_start = col_max - col_shift - BLOCK_N
             col_start = tl.multiple_of(col_start, BLOCK_N)
             off = col_start * k_row_stride
-            if IS_EVEN_MN:
+            if IS_EVEN_MN & d == BLOCK_K:
                 K = tl.load(p_bk0 + off, cache_modifier=".cg")
                 if PRE_LOAD_V:
                     V = tl.load(p_bv0 + off, cache_modifier=".cg")
-            else:
+            elif d == BLOCK_K:
                 col_idx = col_start + tl.arange(0, BLOCK_N)
                 kvmask = col_idx < seqlen_k
                 K = tl.load(p_bk0 + off, mask=kvmask[None, :], cache_modifier=".cg")
                 if PRE_LOAD_V:
                     V = tl.load(p_bv0 + off, mask=kvmask[:, None], cache_modifier=".cg")
+            else:
+                col_idx = col_start + tl.arange(0, BLOCK_N)
+                kvmask = col_idx < seqlen_k
+                K = tl.load(
+                    p_bk0 + off,
+                    mask=kvmask[None, :] & dmask[:, None],
+                    cache_modifier=".cg",
+                )
+                if PRE_LOAD_V:
+                    V = tl.load(
+                        p_bv0 + off,
+                        mask=kvmask[:, None] & dmask[None, :],
+                        cache_modifier=".cg",
+                    )
             S = tl.dot(Q, K, allow_tf32=False)
             S = apply_softcap(S, softcap, is_softcap)
             col_idx = col_start + tl.arange(0, BLOCK_N)
@@ -556,11 +584,18 @@ def flash_fwd_kernel(
 
             if not PRE_LOAD_V:
                 off = col_start * k_row_stride
-                if IS_EVEN_MN:
+                if IS_EVEN_MN & d == BLOCK_K:
                     V = tl.load(p_bv0 + off, cache_modifier=".cg")
-                else:
+                elif d == BLOCK_K:
                     kvmask = col_idx < seqlen_k
                     V = tl.load(p_bv0 + off, mask=kvmask[:, None], cache_modifier=".cg")
+                else:
+                    kvmask = col_idx < seqlen_k
+                    V = tl.load(
+                        p_bv0 + off,
+                        mask=kvmask[:, None] & dmask[None, :],
+                        cache_modifier=".cg",
+                    )
             acc_ = tl.dot(P, V, acc_, allow_tf32=False)
 
     for col_start in tl.range(
@@ -568,9 +603,15 @@ def flash_fwd_kernel(
     ):
         col_start = tl.multiple_of(col_start, BLOCK_N)
         off = col_start * k_row_stride
-        K = tl.load(p_bk0 + off, cache_modifier=".cg")
-        if PRE_LOAD_V:
-            V = tl.load(p_bv0 + off, cache_modifier=".cg")
+        if d == BLOCK_K:
+            K = tl.load(p_bk0 + off, cache_modifier=".cg")
+            if PRE_LOAD_V:
+                V = tl.load(p_bv0 + off, cache_modifier=".cg")
+        else:
+            K = tl.load(p_bk0 + off, mask=dmask[:, None], cache_modifier=".cg")
+            if PRE_LOAD_V:
+                V = tl.load(p_bv0 + off, mask=dmask[None, :], cache_modifier=".cg")
+
         S = tl.dot(Q, K)
         S = apply_softcap(S, softcap, is_softcap)
         col_idx = col_start + tl.arange(0, BLOCK_N)
@@ -652,7 +693,10 @@ def flash_fwd_kernel(
 
         if not PRE_LOAD_V:
             off = col_start * k_row_stride
-            V = tl.load(p_bv0 + off, cache_modifier=".cg")
+            if d == BLOCK_K:
+                V = tl.load(p_bv0 + off, cache_modifier=".cg")
+            else:
+                V = tl.load(p_bv0 + off, mask=dmask[None, :], cache_modifier=".cg")
         acc_ = tl.dot(P, V, acc_)
 
     # LSE
@@ -676,9 +720,9 @@ def flash_fwd_kernel(
     o_batch_stride = tl.multiple_of(o_batch_stride, d * h)
     o_ptr += bid * o_batch_stride
     o_ptr += hid * o_head_stride
-    o_offset = row_idx[:, None] * o_row_stride + tl.arange(0, d)
+    o_offset = row_idx[:, None] * o_row_stride + tl.arange(0, BLOCK_K)
 
-    if IS_EVEN_MN:
+    if IS_EVEN_MN & d == BLOCK_K:
         tl.store(o_ptr + o_offset, out)
     else:
         tl.store(o_ptr + o_offset, out, mask=qmask)
@@ -699,11 +743,16 @@ def flash_fwd_bh_parallel_kernel():
     pass
 
 
+def flash_fwd_splitkv_kernel_heur_block_k(args):
+    return triton.next_power_of_2(args["d"])
+
+
 @libentry()
 @triton.heuristics(
     values={
         "BLOCK_M": block_m_splitkv_heuristic_spec_args,
         "BLOCK_N": block_n_splitkv_heuristic_spec_args,
+        "BLOCK_K": flash_fwd_splitkv_kernel_heur_block_k,
         "num_warps": lambda args: 4,
         "num_stages": lambda args: 3,
         "PRE_LOAD_V": lambda args: True,
@@ -783,6 +832,7 @@ def flash_fwd_splitkv_kernel(
     blocks_per_split: tl.constexpr,
     BLOCK_M: tl.constexpr,
     BLOCK_N: tl.constexpr,
+    BLOCK_K: tl.constexpr,
     num_warps: tl.constexpr,
     num_stages: tl.constexpr,
 ):
@@ -824,10 +874,11 @@ def flash_fwd_splitkv_kernel(
     q_ptr += bid * q_batch_stride
     q_ptr += hid * q_head_stride
     row_idx = m_block * BLOCK_M + tl.arange(0, BLOCK_M)
-    q_off = row_idx[:, None] * q_row_stride + tl.arange(0, d)[None, :]
+    q_off = row_idx[:, None] * q_row_stride + tl.arange(0, BLOCK_K)[None, :]
     p_qm = q_ptr + q_off
-    qmask = row_idx[:, None] < seqlen_q
-    if IS_EVEN_MN:
+    dmask = tl.arange(0, BLOCK_K) < d
+    qmask = dmask[None, :] & (row_idx[:, None] < seqlen_q)
+    if IS_EVEN_MN & BLOCK_K == d:
         Q = tl.load(p_qm, cache_modifier=".cg")
     else:
         Q = tl.load(p_qm, mask=qmask, cache_modifier=".cg")
@@ -838,13 +889,17 @@ def flash_fwd_splitkv_kernel(
     v_ptr += bid * k_batch_stride
     v_ptr += (hid // h_hk_ratio) * k_head_stride
 
-    k_offset = tl.arange(0, BLOCK_N)[None, :] * k_row_stride + tl.arange(0, d)[:, None]
+    k_offset = (
+        tl.arange(0, BLOCK_N)[None, :] * k_row_stride + tl.arange(0, BLOCK_K)[:, None]
+    )
     p_k0 = k_ptr + k_offset
 
-    v_offset = tl.arange(0, BLOCK_N)[:, None] * k_row_stride + tl.arange(0, d)[None, :]
+    v_offset = (
+        tl.arange(0, BLOCK_N)[:, None] * k_row_stride + tl.arange(0, BLOCK_K)[None, :]
+    )
     p_v0 = v_ptr + v_offset
 
-    acc_ = tl.zeros((BLOCK_M, d), dtype=tl.float32)
+    acc_ = tl.zeros((BLOCK_M, BLOCK_K), dtype=tl.float32)
     rowmax_ = tl.full([BLOCK_M], float("-inf"), dtype=tl.float32)
     rowsum_ = tl.zeros([BLOCK_M], dtype=tl.float32)
 
@@ -854,9 +909,22 @@ def flash_fwd_splitkv_kernel(
             split_block_min, split_block_max, num_stages=num_stages
         ):
             kv_off = n_block * BLOCK_N * k_row_stride
-            K = tl.load(p_k0 + kv_off, cache_modifier=".cg")
+            if d == BLOCK_K:
+                K = tl.load(p_k0 + kv_off, cache_modifier=".cg")
+            else:
+                K = tl.load(
+                    p_k0 + kv_off, mask=dmask[:, None], cache_modifier=".cg", other=0.0
+                )
             if PRE_LOAD_V:
-                V = tl.load(p_v0 + kv_off, cache_modifier=".cg")
+                if d == BLOCK_K:
+                    V = tl.load(p_v0 + kv_off, cache_modifier=".cg")
+                else:
+                    V = tl.load(
+                        p_v0 + kv_off,
+                        mask=dmask[None, :],
+                        cache_modifier=".cg",
+                        other=0.0,
+                    )
             S = tl.dot(Q, K)
             S = apply_softcap(S, softcap, is_softcap)
             col_idx = n_block * BLOCK_N + tl.arange(0, BLOCK_N)
@@ -881,7 +949,15 @@ def flash_fwd_splitkv_kernel(
             )
 
             if not PRE_LOAD_V:
-                V = tl.load(p_v0 + kv_off, cache_modifier=".cg")
+                if d == BLOCK_K:
+                    V = tl.load(p_v0 + kv_off, cache_modifier=".cg")
+                else:
+                    V = tl.load(
+                        p_v0 + kv_off,
+                        mask=dmask[None, :],
+                        cache_modifier=".cg",
+                        other=0.0,
+                    )
             P = P.to(v_ptr.type.element_ty)
             acc_ = tl.dot(P, V, acc_)
     else:
@@ -889,16 +965,31 @@ def flash_fwd_splitkv_kernel(
             kv_off = n_block * BLOCK_N * k_row_stride
             col_idx = n_block * BLOCK_N + tl.arange(0, BLOCK_N)
             row_idx = m_block * BLOCK_M + tl.arange(0, BLOCK_M)
-            if IS_EVEN_MN:
+            if IS_EVEN_MN & d == BLOCK_K:
                 K = tl.load(p_k0 + kv_off, cache_modifier=".cg")
                 if PRE_LOAD_V:
                     V = tl.load(p_v0 + kv_off, cache_modifier=".cg")
-            else:
+            elif d == BLOCK_K:
                 kvmask = col_idx < seqlen_k
                 K = tl.load(p_k0 + kv_off, mask=kvmask[None, :], cache_modifier=".cg")
                 if PRE_LOAD_V:
                     V = tl.load(
                         p_v0 + kv_off, mask=kvmask[:, None], cache_modifier=".cg"
+                    )
+            else:
+                kvmask = col_idx < seqlen_k
+                K = tl.load(
+                    p_k0 + kv_off,
+                    mask=dmask[:, None] & kvmask[None, :],
+                    cache_modifier=".cg",
+                    other=0.0,
+                )
+                if PRE_LOAD_V:
+                    V = tl.load(
+                        p_v0 + kv_off,
+                        mask=dmask[None, :] & kvmask[:, None],
+                        cache_modifier=".cg",
+                        other=0.0,
                     )
 
             S = tl.dot(Q, K)
@@ -936,11 +1027,18 @@ def flash_fwd_splitkv_kernel(
             )
 
             if not PRE_LOAD_V:
-                if IS_EVEN_MN:
+                if IS_EVEN_MN & d == BLOCK_K:
                     V = tl.load(p_v0 + kv_off, cache_modifier=".cg")
-                else:
+                elif d == BLOCK_K:
                     V = tl.load(
                         p_v0 + kv_off, mask=kvmask[:, None], cache_modifier=".cg"
+                    )
+                else:
+                    V = tl.load(
+                        p_v0 + kv_off,
+                        mask=dmask[None, :] & kvmask[:, None],
+                        cache_modifier=".cg",
+                        other=0.0,
                     )
             P = P.to(v_ptr.type.element_ty)
             acc_ = tl.dot(P, V, acc_)
@@ -962,11 +1060,11 @@ def flash_fwd_splitkv_kernel(
     o_split_ptr = o_ptr
     # + split, batch, head offsets, seq_block offsets are already added in row_idx
     o_split_ptr += (split_id * tl.num_programs(2) + tl.program_id(2)) * seqlen_q * d
-    o_split_offset = row_idx[:, None] * d + tl.arange(0, d)
+    o_split_offset = row_idx[:, None] * d + tl.arange(0, BLOCK_K)
     o_split_ptr = tl.multiple_of(o_split_ptr, d)
     p_om = o_split_ptr + o_split_offset
 
-    if IS_EVEN_MN:
+    if IS_EVEN_MN & BLOCK_K == d:
         tl.store(p_om, acc_, cache_modifier=".cg")
     else:
         tl.store(p_om, acc_, mask=qmask, cache_modifier=".cg")
@@ -998,11 +1096,14 @@ def flash_fwd_splitkv_combine_kernel(
     out_splits_ptr,
     lse_splits_ptr,
     head_size: tl.constexpr,
+    out_split_stride,
+    lse_split_stride,
     out_b_stride,
     out_s_stride,
     out_h_stride,
     n_splits,
     BLOCK_M: tl.constexpr,
+    BLOCK_K: tl.constexpr,
     q_total,
     MAX_N_SPLITS: tl.constexpr,
 ):
@@ -1011,8 +1112,6 @@ def flash_fwd_splitkv_combine_kernel(
     lse_ptr += pid * BLOCK_M
     out_splits_ptr += pid * BLOCK_M * head_size
     out_ptr += pid * BLOCK_M * head_size
-    lse_split_stride = tl.num_programs(0) * BLOCK_M
-    out_split_stride = tl.num_programs(0) * BLOCK_M * head_size
 
     # Subtracting maximum from each of the split lse's for better numerical stability
     lse_split_offset = (
@@ -1040,37 +1139,89 @@ def flash_fwd_splitkv_combine_kernel(
     out_split_offset = (
         tl.arange(0, BLOCK_M)[:, None, None] * head_size
         + tl.arange(0, MAX_N_SPLITS)[None, :, None] * out_split_stride
-        + tl.arange(0, head_size)[None, None, :]
+        + tl.arange(0, BLOCK_K)[None, None, :]
     )
     out_split_mask = (
-        pid * BLOCK_M + tl.arange(0, BLOCK_M)[:, None, None] < q_total
-    ) & (tl.arange(0, MAX_N_SPLITS)[None, :, None] < n_splits)
+        (pid * BLOCK_M + tl.arange(0, BLOCK_M)[:, None, None] < q_total)
+        & (tl.arange(0, MAX_N_SPLITS)[None, :, None] < n_splits)
+        & (tl.arange(0, BLOCK_K)[None, None, :] < head_size)
+    )
     out_splits = tl.load(
-        out_splits_ptr + out_split_offset, mask=out_split_mask, other=0
+        out_splits_ptr + out_split_offset, mask=out_split_mask, other=0.0
     )
     out = tl.sum(Zi_Z[:, :, None] * out_splits, 1)
     out = out.to(out_ptr.type.element_ty)
 
     # Write back output
-    out_offset = tl.arange(0, BLOCK_M)[:, None] * out_s_stride + tl.arange(0, head_size)
-    tl.store(out_ptr + out_offset, out, mask=out_mask[:, None])
+    out_offset = tl.arange(0, BLOCK_M)[:, None] * out_s_stride + tl.arange(0, BLOCK_K)
+    dmask = tl.arange(0, BLOCK_K) < head_size
+    tl.store(out_ptr + out_offset, out, mask=out_mask[:, None] & dmask[None, :])
 
 
 @triton.jit
-def block_to_cache_index(
-    n_block, page_table_ptr, block_size, page_stride, row_stride, BLOCK_N
+def virtual_to_cache(
+    virtual_index,
+    max_virtual_index,
+    page_table_ptr,
+    block_size,
+    boundary_check: tl.constexpr = False,
 ):
-    row_index = n_block * BLOCK_N
-    page_offset = row_index % block_size
-    virtual_page_index = row_index // block_size
-    # page_table_ptr is already pointed at the start of the current batch element
-    cache_page_index = tl.load(page_table_ptr + virtual_page_index).to(tl.int32)
-    return cache_page_index * block_size + page_offset
+    # virtual_index is the kv sequence index in the current batch element
+    # page_table_ptr is already pointed at current batch element's block table entry
+    # block_size is the size of each block in the page table
+    virtual_page_index = virtual_index // block_size
+    page_offset = virtual_index % block_size
+    if boundary_check:
+        page_block_index = tl.load(
+            page_table_ptr + virtual_page_index,
+            mask=virtual_index < max_virtual_index,
+            other=0,
+        ).to(tl.int32)
+    else:
+        page_block_index = tl.load(page_table_ptr + virtual_page_index).to(tl.int32)
+    return page_block_index * block_size + page_offset
+
+
+@triton.jit
+def load_from_kvcache(
+    virtual_index,
+    max_virtual_index,
+    page_table_ptr,
+    k_ptr_base,
+    v_ptr_base,
+    block_size,
+    d: tl.constexpr,
+    k_row_stride,
+    BLOCK_K: tl.constexpr,
+    boundary_check: tl.constexpr = False,
+):
+    kvcache_idx = virtual_to_cache(
+        virtual_index, max_virtual_index, page_table_ptr, block_size, boundary_check
+    )
+    k_offset = tl.arange(0, BLOCK_K)[:, None] + kvcache_idx[None, :] * k_row_stride
+    v_offset = tl.arange(0, BLOCK_K)[None, :] + kvcache_idx[:, None] * k_row_stride
+    if d == BLOCK_K:
+        bK = tl.load(k_ptr_base + k_offset)
+        bV = tl.load(v_ptr_base + v_offset)
+    else:
+        bK = tl.load(
+            k_ptr_base + k_offset, mask=tl.arange(0, BLOCK_K)[:, None] < d, other=0.0
+        )
+        bV = tl.load(
+            v_ptr_base + v_offset, mask=tl.arange(0, BLOCK_K)[None, :] < d, other=0.0
+        )
+    return bK, bV
 
 
 @libentry()
 @triton.jit(
     do_not_specialize=[
+        "q_batch_stride",
+        "k_batch_stride",
+        "v_batch_stride",
+        "o_batch_stride",
+        "b",
+        "bk",
         "seqlen_q",
         "seqlen_k",
         "seqlen_q_rounded",
@@ -1104,8 +1255,8 @@ def flash_varlen_fwd_kernel(
     is_seqused_k: tl.constexpr,
     seqused_k_ptr,
     # sizes
-    b: tl.constexpr,
-    bk: tl.constexpr,
+    b,
+    bk,
     h: tl.constexpr,
     hk: tl.constexpr,
     h_hk_ratio: tl.constexpr,
@@ -1145,6 +1296,7 @@ def flash_varlen_fwd_kernel(
     # kernel params
     BLOCK_M: tl.constexpr,
     BLOCK_N: tl.constexpr,
+    BLOCK_K: tl.constexpr,
     num_warps: tl.constexpr,
     num_stages: tl.constexpr,
 ):
@@ -1175,8 +1327,6 @@ def flash_varlen_fwd_kernel(
     else:
         k_len_cache = seqlen_k
         # k_offset = bid * k_batch_stride
-
-    # v_head_offset = (hid / h_hk_ratio) * k_head_stride
 
     if is_seqused_k:
         k_len = tl.load(seqused_k_ptr + bid).to(tl.int32)
@@ -1210,41 +1360,27 @@ def flash_varlen_fwd_kernel(
         philox_seed = tl.load(philox_args).to(tl.uint64)
         philox_offset = tl.load(philox_args + 1).to(tl.uint64)
 
-    # start processing kv blocks
+    # Locate the page table entry for the current batch element
     page_table_ptr += bid * page_table_batch_stride
+    # Calculate the starting offset of q for the current head
     q_row_offset = hid * q_head_stride
+    # Calculate the starting offset of k and v for the current head
     k_row_offset = (hid // h_hk_ratio) * k_head_stride
+    # Shift the k, v pointers to align with the current head
+    k_ptr_base = k_ptr + k_row_offset
+    v_ptr_base = v_ptr + k_row_offset
 
     gQ = tl.make_block_ptr(
         base=q_ptr + q_offset + q_row_offset,
         shape=(q_len, d),
         strides=(q_row_stride, 1),
         offsets=(0, 0),
-        block_shape=(BLOCK_M, d),
+        block_shape=(BLOCK_M, BLOCK_K),
         order=(1, 0),
     )
+    bQ = tl.load(gQ.advance([m_block * BLOCK_M, 0]), boundary_check=(0, 1))
 
-    gK = tl.make_block_ptr(
-        base=k_ptr + k_row_offset,
-        shape=(d, bk * block_size),
-        strides=(1, k_row_stride),
-        offsets=(0, 0),
-        block_shape=(d, BLOCK_N),
-        order=(0, 1),
-    )
-
-    gV = tl.make_block_ptr(
-        base=v_ptr + k_row_offset,
-        shape=(bk * block_size, d),
-        strides=(k_row_stride, 1),
-        offsets=(0, 0),
-        block_shape=(BLOCK_N, d),
-        order=(1, 0),
-    )
-
-    bQ = tl.load(gQ.advance([m_block * BLOCK_M, 0]), boundary_check=(0,))
-
-    acc_ = tl.zeros((BLOCK_M, d), dtype=tl.float32)
+    acc_ = tl.zeros((BLOCK_M, BLOCK_K), dtype=tl.float32)
     rowmax_ = tl.full([BLOCK_M], float("-inf"), dtype=tl.float32)
     rowsum_ = tl.zeros([BLOCK_M], dtype=tl.float32)
 
@@ -1263,24 +1399,25 @@ def flash_varlen_fwd_kernel(
         n_masking_steps = tl.cdiv(BLOCK_M, BLOCK_N) + 1
 
     n_masking_steps = min(n_block_max - n_block_min, n_masking_steps)
+
+    row_idx = m_block * BLOCK_M + tl.arange(0, BLOCK_M)
+    n_block = n_block_max - 1
     for step in tl.range(0, n_masking_steps):
-        # for step in tl.range(1):
-        n_block = n_block_max - 1 - step
-        cache_row_index = block_to_cache_index(
-            n_block,
+        col_idx = n_block * BLOCK_N + tl.arange(0, BLOCK_N)
+        bK, bV = load_from_kvcache(
+            col_idx,
+            k_len,
             page_table_ptr,
+            k_ptr_base,
+            v_ptr_base,
             block_size,
-            page_table_batch_stride,
+            d,
             k_row_stride,
-            BLOCK_N,
+            BLOCK_K=BLOCK_K,
+            boundary_check=True,
         )
-        bK = tl.load(gK.advance([0, cache_row_index]), boundary_check=(1,))
-        # preload V
-        bV = tl.load(gV.advance([cache_row_index, 0]), boundary_check=(0,))
         S = tl.dot(bQ, bK, out_dtype=tl.float32)
         S = apply_softcap(S, softcap, is_softcap)
-        col_idx = n_block * BLOCK_N + tl.arange(0, BLOCK_N)
-        row_idx = m_block * BLOCK_M + tl.arange(0, BLOCK_M)
         S = apply_alibi(
             S,
             col_idx,
@@ -1333,25 +1470,25 @@ def flash_varlen_fwd_kernel(
             )
 
         acc_ = tl.dot(P, bV, acc_)
+        n_block -= 1
 
     for n_block in tl.range(
         n_block_max - n_masking_steps - 1, n_block_min - 1, step=-1
     ):
-        cache_row_index = block_to_cache_index(
-            n_block,
+        col_idx = n_block * BLOCK_N + tl.arange(0, BLOCK_N)
+        bK, bV = load_from_kvcache(
+            col_idx,
+            k_len,
             page_table_ptr,
+            k_ptr_base,
+            v_ptr_base,
             block_size,
-            page_table_batch_stride,
+            d,
             k_row_stride,
-            BLOCK_N,
+            BLOCK_K=BLOCK_K,
         )
-        bK = tl.load(gK.advance([0, cache_row_index]))
-        # preload V
-        bV = tl.load(gV.advance([cache_row_index, 0]))
         S = tl.dot(bQ, bK, out_dtype=tl.float32)
         S = apply_softcap(S, softcap, is_softcap)
-        col_idx = n_block * BLOCK_N + tl.arange(0, BLOCK_N)
-        row_idx = m_block * BLOCK_M + tl.arange(0, BLOCK_M)
         S = apply_alibi(
             S,
             col_idx,
@@ -1424,13 +1561,17 @@ def flash_varlen_fwd_kernel(
         shape=(q_len, d),
         strides=(o_row_stride, 1),
         offsets=(0, 0),
-        block_shape=(BLOCK_M, d),
+        block_shape=(BLOCK_M, BLOCK_K),
         order=(1, 0),
     )
-    tl.store(gO.advance([m_block * BLOCK_M, 0]), out, boundary_check=(0,))
+    tl.store(gO.advance([m_block * BLOCK_M, 0]), out, boundary_check=(0, 1))
 
     # Write back lse
     # lse shape: [h, total_q]
     softmax_lse_ptr += hid * total_q
     lse_row_offset = lse_offset + m_block * BLOCK_M + tl.arange(0, BLOCK_M)
-    tl.store(softmax_lse_ptr + lse_row_offset, lse, mask=lse_row_offset < total_q)
+    tl.store(
+        softmax_lse_ptr + lse_row_offset,
+        lse,
+        mask=lse_row_offset < (lse_offset + q_len),
+    )

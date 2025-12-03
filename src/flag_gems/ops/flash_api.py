@@ -325,6 +325,7 @@ def mha_varlan_fwd(
     )
     q_groups = num_heads // num_heads_k
     if seqlenq_ngroups_swapped:
+        logger.debug("Swapping query groups and sequence dimensions")
         q = (
             q.reshape((batch_size, num_heads_k, q_groups, head_size))
             .transpose(1, 2)
@@ -365,7 +366,7 @@ def mha_varlan_fwd(
         assert p_dropout == 0, "dropout is not supported if softcap is used."
 
     round_multiple = lambda x, m: (x + m - 1) // m * m
-    head_size_rounded = round_multiple(head_size, 32) if head_size < 192 else 256
+    head_size_rounded = round_multiple(head_size, 32) if head_size <= 192 else 256
     seqlen_q_rounded = round_multiple(max_seqlen_q, 128)
     seqlen_k_rounded = round_multiple(max_seqlen_k, 32)
 
@@ -507,6 +508,9 @@ def mha_varlan_fwd(
             block_size,  # block_size,
         )
 
+        if flag_gems.vendor_name == "iluvatar":
+            params.k_ptr = k.view(k.shape[0], k.shape[1], -1)
+            params.v_ptr = v.view(v.shape[0], v.shape[1], -1)
         logger.debug("kernel: flash_varlen_fwd")
         grid = lambda args: (
             triton.cdiv(max_seqlen_q, args["BLOCK_M"]),
@@ -516,19 +520,37 @@ def mha_varlan_fwd(
         kernel = flash_varlen_fwd_kernel[grid]
         args = tuple(getattr(params, k) for k in params.__slots__)
 
-        # We have to forego parameter autotuning and particularly fix BLOCK_N
-        # to avoid breaking a kv block onto multiple cache pages.
-        cfg = runtime.get_heuristic_config("mha_varlen_fwd")
+        # We assess which phase the requests are likely to be in and set the config accordingly.
+        total_rows = total_q * num_heads
+        num_sms = torch_device_fn.get_device_properties(
+            flag_gems.device
+        ).multi_processor_count
+        avg_rows_per_sm = total_rows / num_sms
+        avg_rows_per_batch = total_q / batch_size
+        avg_rows_per_cta = min(avg_rows_per_batch, avg_rows_per_sm)
+        # Heuristic: if avg_rows_per_sm >= 128, we are likely in prefill phase.
+        # This is a rough heuristic and may not be accurate for all scenarios.
+        if avg_rows_per_cta > 64:
+            varlen_fwd_config_str = "mha_block_128"
+        elif avg_rows_per_cta > 32:
+            varlen_fwd_config_str = "mha_block_64"
+        elif avg_rows_per_cta > 16:
+            varlen_fwd_config_str = "mha_block_32"
+        else:
+            varlen_fwd_config_str = "mha_block_16"
+        if flag_gems.vendor_name == "mthreads":
+            varlen_fwd_config_str = "mha_block_32"
+
+        cfg = runtime.get_heuristic_config(varlen_fwd_config_str)
         cfg_params = {
             "BLOCK_M": cfg["BLOCK_M"](args),
             "BLOCK_N": cfg["BLOCK_N"](args),
+            "BLOCK_K": triton.next_power_of_2(head_size),
             "num_warps": cfg["num_warps"](args),
             "num_stages": cfg["num_stages"](args),
         }
-        # BLOCK_M, BLOCK_N, num_warps, num_stages = 128, 32, 4, 3
-        assert (
-            block_size % cfg_params["BLOCK_N"] == 0
-        ), f"block_size must be divisible by {cfg_params['BLOCK_N']}."
+
+        logger.debug("Running flash_varlen_fwd_kernel with config: %s", cfg_params)
         kernel(*args, **cfg_params)
 
         if seqlenq_ngroups_swapped:
@@ -622,6 +644,11 @@ def mha_fwd(
     head_size_rounded = round_multiple(head_size, 32)
     seqlen_q_rounded = round_multiple(seqlen_q, 128)
     seqlen_k_rounded = round_multiple(seqlen_k, 32)
+
+    assert (
+        head_size <= 256
+    ), "FlashAttention forward only supports head dimension at most 256"
+    assert head_size == head_size_rounded, "head_size must be rounded to 32"
 
     def splits_heuristic(num_tasks, num_sms, n_blocks):
         # splits when wave efficiency is low
@@ -730,14 +757,6 @@ def mha_fwd(
                 n_blocks = triton.cdiv(seqlen_k, BN)
                 n_splits = splits_heuristic(n_tasks, num_sms, n_blocks)
 
-                # if _debug:
-                #     n_splits = 32
-                #     n_blocks = triton.cdiv(K, BN)
-                #     blocks_per_split = triton.cdiv(n_blocks, n_splits)
-                #     print("block_n:", BN)
-                #     print("n_splits:", n_splits)
-                #     print("blocks_per_split", blocks_per_split)
-
                 if n_splits > 1:
                     logger.debug("kernel: flash_fwd_splitkv")
                     lse_splits = torch.empty(
@@ -757,18 +776,21 @@ def mha_fwd(
                     extra_args = {"blocks_per_split": triton.cdiv(n_blocks, n_splits)}
                     kernel = splitkv_kernel(*params.args(), **extra_args)
 
-                    if D % 128 == 0:
+                    if D >= 128:
                         BLOCK_M = 4
-                    elif D % 64 == 0:
+                    elif D >= 64:
                         BLOCK_M = 8
                     else:
                         BLOCK_M = 16
+                    BLOCK_K = triton.next_power_of_2(D)
                     grid = lambda args: (triton.cdiv(B * H * Q, BLOCK_M),)
                     combine_kernel = flash_fwd_splitkv_combine_kernel[grid]
                     combine_args = {
                         "out_ptr": out,
                         "lse_ptr": lse,
                         "head_size": head_size,
+                        "out_split_stride": out_splits.stride(0),
+                        "lse_split_stride": lse_splits.stride(0),
                         "out_b_stride": out.stride(0),
                         "out_s_stride": out.stride(-3),
                         "out_h_stride": out.stride(-1),
@@ -776,6 +798,7 @@ def mha_fwd(
                         "lse_splits_ptr": lse_splits,
                         "n_splits": n_splits,
                         "BLOCK_M": BLOCK_M,
+                        "BLOCK_K": BLOCK_K,
                         "q_total": B * H * Q,
                         "MAX_N_SPLITS": triton.next_power_of_2(n_splits),
                     }
@@ -866,6 +889,11 @@ def mha_fwd(
             0,  # block_size,
         )
 
+        # Move TxD to last dims for correct stride in Triton tt.load
+        if flag_gems.vendor_name == "iluvatar":
+            params.q_ptr = q.transpose(1, 2)
+            params.k_ptr = k.transpose(1, 2)
+            params.v_ptr = v.transpose(1, 2)
         kernel = dispatch(batch_size, num_heads, seqlen_q, seqlen_k, head_size, params)
 
         if _debug:

@@ -1,4 +1,5 @@
 import math
+import os
 
 import numpy as np
 import pytest
@@ -146,7 +147,6 @@ def test_accuracy_groupnorm_backward(N, C, H, W, num_groups, dtype, wb_none):
         gems_assert_close(res_bias_grad, ref_bias_grad, dtype, reduce_dim=N * HxW)
 
 
-@pytest.mark.skipif(flag_gems.device == "musa", reason="to_cpu unknown error")
 @pytest.mark.layer_norm
 @pytest.mark.parametrize(
     "shape",
@@ -222,6 +222,9 @@ def test_accuracy_layernorm_backward(shape, dtype, wb_none):
     if flag_gems.vendor_name == "kunlunxin":
         torch.manual_seed(0)
         torch.cuda.manual_seed_all(0)
+    if flag_gems.vendor_name == "mthreads":
+        # Compatible with older versions of LLVM
+        os.environ["DISABLE_LLVM_OPT"] = "1"
 
     res_inp = torch.randn(shape, dtype=dtype, device=flag_gems.device)
     res_grad = torch.randn_like(res_inp)
@@ -280,9 +283,11 @@ def test_accuracy_layernorm_backward(shape, dtype, wb_none):
         gems_assert_close(res_weight_grad, ref_weight_grad, dtype, reduce_dim=shape[0])
         gems_assert_close(res_bias_grad, ref_bias_grad, dtype, reduce_dim=shape[0])
 
+    if flag_gems.vendor_name == "mthreads":
+        # Compatible with older versions of LLVM
+        del os.environ["DISABLE_LLVM_OPT"]
 
-@pytest.mark.skipif(flag_gems.device == "musa", reason="AssertionError")
-@pytest.mark.skipif(flag_gems.vendor_name == "kunlunxin", reason="RESULT TODOFIX")
+
 @pytest.mark.instance_norm
 @pytest.mark.parametrize(
     "shape",
@@ -552,8 +557,6 @@ def test_accuracy_rmsnorm(shape, dtype):
     )
 
     gems_assert_close(res_out, ref_out, dtype)
-    if flag_gems.vendor_name == "kunlunxin" and shape == (200, 40999, 3):
-        pytest.skip("wait for backward support")
     gems_assert_close(res_grad, ref_grad, dtype)
     gems_assert_close(res_weight_grad, ref_weight_grad, dtype, reduce_dim=N)
 
@@ -651,7 +654,6 @@ def test_accuracy_vectornorm(shape, ord, dim, keepdim, dtype):
     gems_assert_close(res_out, ref_out, dtype)
 
 
-@pytest.mark.skipif(flag_gems.device == "musa", reason="ZeroDivisionError")
 @pytest.mark.skipif(flag_gems.vendor_name == "kunlunxin", reason="RESULT TODOFIX")
 @pytest.mark.batch_norm
 @pytest.mark.parametrize(
@@ -714,6 +716,7 @@ def test_accuracy_batch_norm(shape, dtype, affine):
     gems_assert_close(running_var, ref_running_var, dtype)
 
 
+@pytest.mark.skipif(flag_gems.vendor_name == "kunlunxin", reason="RESULT TODOFIX")
 @pytest.mark.batch_norm
 @pytest.mark.parametrize(
     "shape",

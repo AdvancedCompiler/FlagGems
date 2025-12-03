@@ -964,10 +964,18 @@ class WrapperGenerator:
                     code.writeline("isCloseOffsetAnalysis=True,")
                 elif self.config.is_cat:
                     code.writeline("buffer_size_limit=512,")
+                elif self.config.buffer_size_limit:
+                    code.writeline(
+                        f"buffer_size_limit={self.config.buffer_size_limit},"
+                    )
                 else:
                     code.writeline("buffer_size_limit=2048,")
                 if self.config.isCloseVectorization:
                     code.writeline("isCloseVectorization=True,")
+                if self.config.isCloseDtypeConvert:
+                    code.writeline("isCloseDtypeConvert=True,")
+                if not self.config.isCloseMemoryAsync:
+                    code.writeline("isCloseMemoryAsync=False,")
                 if os.getenv("XPU_cmp_nan") == "1":
                     code.writeline("isOpenCmpNan=True,")
             code.writeline(")")
@@ -1021,10 +1029,18 @@ class WrapperGenerator:
                     code.writeline("isCloseOffsetAnalysis=True,")
                 elif self.config.is_cat:
                     code.writeline("buffer_size_limit=512,")
+                elif self.config.buffer_size_limit:
+                    code.writeline(
+                        f"buffer_size_limit={self.config.buffer_size_limit},"
+                    )
                 else:
                     code.writeline("buffer_size_limit=2048,")
                 if self.config.isCloseVectorization:
                     code.writeline("isCloseVectorization=True,")
+                if self.config.isCloseDtypeConvert:
+                    code.writeline("isCloseDtypeConvert=True,")
+                if not self.config.isCloseMemoryAsync:
+                    code.writeline("isCloseMemoryAsync=False,")
                 if os.getenv("XPU_cmp_nan") == "1":
                     code.writeline("isOpenCmpNan=True,")
             code.writeline(")")
@@ -1182,10 +1198,13 @@ class PointwiseDynamicFunction:
 
         tensors = out_tensors + in_tensors
         if self.use_fast_path(tensors):  # dimension collapse & use physical ordering
-            allocated_outputs = [
-                torch.empty_like(tensors[0], dtype=dtype)
-                for dtype in outputs_dtypes_for_allocation
-            ]
+            if len(out_tensors) == 0:  # inplace
+                allocated_outputs = tensors
+            else:
+                allocated_outputs = [
+                    torch.empty_like(tensors[0], dtype=dtype)
+                    for dtype in outputs_dtypes_for_allocation
+                ]
             task_shape = (tensors[0].numel(),)
             strides = (1,)
             ndim = 1

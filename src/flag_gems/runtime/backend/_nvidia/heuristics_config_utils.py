@@ -34,6 +34,18 @@ def bmm_heur_divisible_k(args):
     return args["K"] % args["TILE_K"] == 0
 
 
+def baddbmm_heur_divisible_m(args):
+    return args["M"] % args["TILE_M"] == 0
+
+
+def baddbmm_heur_divisible_n(args):
+    return args["N"] % args["TILE_N"] == 0
+
+
+def baddbmm_heur_divisible_k(args):
+    return args["K"] % args["TILE_K"] == 0
+
+
 def dropout_heur_block(args):
     if args["N"] <= 512:
         return 512
@@ -175,7 +187,7 @@ def softmax_heur_tile_n_bwd_non_inner(args):
     return max(1, 1024 // args["TILE_K"])
 
 
-def softmax_heru_tile_m(args):
+def softmax_heur_tile_m(args):
     return max(1, 1024 // args["TILE_N"])
 
 
@@ -246,6 +258,11 @@ HEURISTICS_CONFIGS = {
         "DIVISIBLE_N": bmm_heur_divisible_n,
         "DIVISIBLE_K": bmm_heur_divisible_k,
     },
+    "baddbmm": {
+        "DIVISIBLE_M": baddbmm_heur_divisible_m,
+        "DIVISIBLE_N": baddbmm_heur_divisible_n,
+        "DIVISIBLE_K": baddbmm_heur_divisible_k,
+    },
     "dropout": {
         "BLOCK": dropout_heur_block,
         "num_warps": dropout_heur_num_warps,
@@ -289,7 +306,7 @@ HEURISTICS_CONFIGS = {
         "ONE_TILE_PER_CTA": softmax_heur_one_tile_per_cta,
     },
     "softmax_backward_inner": {
-        "TILE_M": softmax_heru_tile_m,
+        "TILE_M": softmax_heur_tile_m,
         "ONE_TILE_PER_CTA": softmax_heur_one_tile_per_cta,
     },
     "uniform": {
@@ -311,9 +328,27 @@ HEURISTICS_CONFIGS = {
     "vdot": {
         "BLOCK_SIZE": vdot_heur_block_size,
     },
-    "mha_varlen_fwd": {
+    "mha_block_128": {
         "BLOCK_M": lambda args: 128,
         "BLOCK_N": lambda args: 32,
+        "num_warps": lambda args: 4,
+        "num_stages": lambda args: 3,
+    },
+    "mha_block_64": {
+        "BLOCK_M": lambda args: 64,
+        "BLOCK_N": lambda args: 64,
+        "num_warps": lambda args: 4,
+        "num_stages": lambda args: 3,
+    },
+    "mha_block_32": {
+        "BLOCK_M": lambda args: 32,
+        "BLOCK_N": lambda args: 64,
+        "num_warps": lambda args: 4,
+        "num_stages": lambda args: 3,
+    },
+    "mha_block_16": {
+        "BLOCK_M": lambda args: 16,
+        "BLOCK_N": lambda args: 64,
         "num_warps": lambda args: 4,
         "num_stages": lambda args: 3,
     },
