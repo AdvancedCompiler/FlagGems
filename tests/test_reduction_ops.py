@@ -1810,9 +1810,9 @@ def test_accuracy_scaled_softmax_forward(
     batch_size, attn_heads, query_seq_len, key_seq_len, scale_factor, dtype
 ):
     try:
-        from transformer_engine.common import load_framework_extension
+        from transformer_engine.common import _load_library
 
-        load_framework_extension("torch")
+        _load_library()
         import transformer_engine_torch as tex  # type: ignore
     except ImportError:
         pytest.skip("transformer_engine_torch is not available, skipping accuracy test")
@@ -1840,9 +1840,9 @@ def test_accuracy_scaled_softmax_backward(
     batch_size, attn_heads, query_seq_len, key_seq_len, scale_factor, dtype
 ):
     try:
-        from transformer_engine.common import load_framework_extension
+        from transformer_engine.common import _load_library
 
-        load_framework_extension("torch")
+        _load_library()
         import transformer_engine_torch as tex  # type: ignore
     except ImportError:
         pytest.skip("transformer_engine_torch is not available, skipping accuracy test")
