@@ -86,6 +86,11 @@ at::Tensor remainder_ts(const at::Tensor &a, double b_scalar);
 at::Tensor remainder_st(double a_scalar, const at::Tensor &b);
 at::Tensor remainder(const at::Tensor &a, const at::Tensor &b);
 at::Tensor remainder_(at::Tensor &a, const at::Tensor &b);
+std::tuple<at::Tensor, at::Tensor> sort(const at::Tensor &self, int64_t dim = -1, bool descending = false);
+std::tuple<at::Tensor, at::Tensor> sort_stable(const at::Tensor &inp,
+                                               c10::optional<bool> stable,
+                                               int64_t dim = -1,
+                                               bool descending = false);
 
 at::Tensor fill_scalar(const at::Tensor &input, const c10::Scalar &value);
 

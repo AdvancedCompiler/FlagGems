@@ -120,6 +120,11 @@ TORCH_LIBRARY(flag_gems, m) {
   m.def("remainder.Tensor(Tensor self, Tensor other) -> Tensor");
   m.def("remainder_.Tensor(Tensor(a!) self, Tensor other) -> Tensor(a!)");
   m.def("remainder.Scalar_Tensor(Scalar self, Tensor other) -> Tensor");
+  // sort
+  m.def("sort(Tensor self, int dim=-1, bool descending=False) -> (Tensor values, Tensor indices)");
+  m.def(
+      "sort.stable(Tensor self, *, bool? stable, int dim=-1, bool descending=False) -> (Tensor values, "
+      "Tensor indices)");
 
   m.def("fill.Scalar(Tensor self, Scalar value) -> Tensor");
   m.def("fill.Tensor(Tensor self, Tensor value) -> Tensor");
@@ -203,6 +208,9 @@ TORCH_LIBRARY_IMPL(flag_gems, CUDA, m) {
   m.impl("remainder.Tensor", TORCH_FN(remainder));
   m.impl("remainder_.Tensor", TORCH_FN(remainder_));
   m.impl("remainder.Scalar_Tensor", TORCH_FN(remainder));
+  // sort
+  m.impl("sort", TORCH_FN(sort));
+  m.impl("sort.stable", TORCH_FN(sort_stable));
 
   m.impl("fill.Scalar", TORCH_FN(fill_scalar));
   m.impl("fill.Tensor", TORCH_FN(fill_tensor));

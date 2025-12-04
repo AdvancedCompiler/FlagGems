@@ -20,6 +20,7 @@ add_library(operators
             argmax.cpp
             div.cpp
             softmax.cpp
+            sort.cpp
 	          exponential_.cpp
             fill.cpp
             reshape_and_cache_flash.cpp
