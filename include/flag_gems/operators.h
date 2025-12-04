@@ -71,7 +71,6 @@ at::Tensor embedding_backward(const at::Tensor &grad_outputs,
                               int64_t padding_idx = -1,
                               bool scale_grad_by_freq = false,
                               bool sparse = false);
-at::Tensor argmax(const at::Tensor &self, std::optional<int64_t> dim = std::nullopt, bool keepdim = false);
 
 at::Tensor fill_scalar(const at::Tensor &input, const c10::Scalar &value);
 
