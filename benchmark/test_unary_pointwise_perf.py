@@ -65,6 +65,7 @@ forward_operations = [
     # Trigonometric operations
     ("cos", torch.cos, FLOAT_DTYPES),
     ("sin", torch.sin, FLOAT_DTYPES),
+    ("tan", torch.tan, FLOAT_DTYPES),
     ("tanh", torch.tanh, FLOAT_DTYPES),
     ("atan", torch.atan, FLOAT_DTYPES),
     # Bitwise operations
@@ -112,6 +113,7 @@ forward_inplace_operations = [
     # Trigonometric operations
     ("cos_", torch.cos_, FLOAT_DTYPES),
     ("sin_", torch.sin_, FLOAT_DTYPES),
+    ("tan_", torch.tan_, FLOAT_DTYPES),
     ("tanh_", torch.tanh_, FLOAT_DTYPES),
     ("atan_", torch.atan_, FLOAT_DTYPES),
     # Bitwise operations
@@ -179,6 +181,25 @@ def test_to_copy_perf():
         torch_op=torch.ops.aten._to_copy,
         dtypes=[torch.float16, torch.bfloat16]
         + ([torch.float64] if fp64_is_supported else []),
+    )
+    bench.run()
+
+
+class CopyInplaceBenchmark(Benchmark):
+    def get_input_iter(self, cur_dtype) -> Generator:
+        for shape in self.shapes:
+            dst = generate_tensor_input(shape, cur_dtype, self.device)
+            src = generate_tensor_input(shape, cur_dtype, self.device)
+            yield dst, src
+
+
+@pytest.mark.copy_
+def test_copy_inplace_perf():
+    bench = CopyInplaceBenchmark(
+        op_name="copy_",
+        torch_op=torch.ops.aten.copy_,
+        dtypes=FLOAT_DTYPES + INT_DTYPES + BOOL_DTYPES,
+        is_inplace=True,
     )
     bench.run()
 

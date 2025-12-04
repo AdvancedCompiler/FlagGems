@@ -2,6 +2,7 @@ import pytest
 import torch
 
 import flag_gems
+from flag_gems.ops.copy import _can_use_triton
 
 from .accuracy_utils import (
     ALL_FLOAT_DTYPES,
@@ -263,6 +264,22 @@ def test_accuracy_exp_(shape, dtype):
     ref_out = torch.exp_(ref_inp)
     with flag_gems.use_gems():
         res_out = torch.exp_(inp)
+
+    gems_assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.exp
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_exp_out(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=flag_gems.device)
+    ref_inp = to_reference(inp, True)
+
+    ref_out = torch.empty_like(ref_inp)
+    torch.exp(ref_inp, out=ref_out)
+    with flag_gems.use_gems():
+        res_out = torch.empty_like(inp)
+        torch.exp(inp, out=res_out)
 
     gems_assert_close(res_out, ref_out, dtype)
 
@@ -793,6 +810,35 @@ def test_accuracy_sin_(shape, dtype):
     gems_assert_close(res_out, ref_out, dtype)
 
 
+@pytest.mark.tan
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_tan(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=flag_gems.device)
+    ref_inp = to_reference(inp, True)
+
+    ref_out = torch.tan(ref_inp)
+    with flag_gems.use_gems():
+        res_out = torch.tan(inp)
+
+    gems_assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.inplace
+@pytest.mark.tan_
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_tan_(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=flag_gems.device)
+    ref_inp = to_reference(inp.clone(), True)
+
+    ref_out = torch.tan_(ref_inp)
+    with flag_gems.use_gems():
+        res_out = torch.tan_(inp)
+
+    gems_assert_close(res_out, ref_out, dtype)
+
+
 @pytest.mark.tanh
 @pytest.mark.parametrize("shape", POINTWISE_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
@@ -1080,6 +1126,93 @@ def test_accuracy_to_copy_preserve_strides(memory_format):
         assert res_out.stride() == ref_out.stride()
     else:
         assert res_out.is_contiguous()
+
+
+@pytest.mark.inplace
+@pytest.mark.copy_
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_copy_inplace_same_dtype(shape, dtype):
+    src = torch.randn(shape, dtype=dtype, device=flag_gems.device)
+    ref_src = to_reference(src)
+    ref_dst = torch.zeros_like(ref_src)
+    res_dst = torch.zeros_like(src)
+
+    ref_dst.copy_(ref_src)
+    with flag_gems.use_gems():
+        res_dst.copy_(src)
+
+    gems_assert_equal(res_dst, ref_dst)
+
+
+@pytest.mark.inplace
+@pytest.mark.copy_
+def test_copy_inplace_broadcast():
+    dst_shape = (2, 3)
+    src = torch.arange(0, 3, dtype=torch.float32, device=flag_gems.device)
+    ref_src = to_reference(src)
+    ref_dst = to_reference(
+        torch.zeros(dst_shape, dtype=torch.float32, device=flag_gems.device)
+    )
+    res_dst = torch.zeros(dst_shape, dtype=torch.float32, device=flag_gems.device)
+
+    ref_dst.copy_(ref_src)
+    with flag_gems.use_gems():
+        res_dst.copy_(src)
+
+    gems_assert_equal(res_dst, ref_dst)
+
+
+@pytest.mark.inplace
+@pytest.mark.copy_
+def test_copy_inplace_dtype_fallback():
+    src = torch.arange(0, 8, dtype=torch.int32, device=flag_gems.device)
+    ref_src = to_reference(src)
+    ref_dst = to_reference(
+        torch.zeros(src.shape, dtype=torch.float32, device=flag_gems.device)
+    )
+    res_dst = torch.zeros(src.shape, dtype=torch.float32, device=flag_gems.device)
+
+    ref_dst.copy_(ref_src)
+    with flag_gems.use_gems():
+        res_dst.copy_(src)
+
+    gems_assert_equal(res_dst, ref_dst)
+
+
+@pytest.mark.inplace
+@pytest.mark.copy_
+@pytest.mark.parametrize(
+    "src_dtype,dst_dtype",
+    [
+        (torch.float32, torch.int32),
+        (torch.int16, torch.float32),
+        (torch.bool, torch.float32),
+    ],
+)
+def test_copy_inplace_mixed_dtype_triton(src_dtype, dst_dtype):
+    device = flag_gems.device
+    numel = 8
+
+    if src_dtype is torch.bool:
+        base = torch.tensor([True, False, True, True, False, True, False, True])
+        src = base.to(device=device)
+    else:
+        src = torch.arange(numel, device=device, dtype=src_dtype)
+
+    dst = torch.zeros(numel, dtype=dst_dtype, device=device)
+
+    assert _can_use_triton(dst, src)
+
+    ref_src = to_reference(src)
+    ref_dst = to_reference(dst.clone())
+    ref_dst.copy_(ref_src)
+
+    with flag_gems.use_gems():
+        res_dst = dst.clone()
+        res_dst.copy_(src)
+
+    gems_assert_equal(res_dst, ref_dst)
 
 
 @pytest.mark.sqrt

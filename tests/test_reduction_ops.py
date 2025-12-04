@@ -324,8 +324,13 @@ def test_accuracy_cummin(shape, dtype):
     ref_inp = to_reference(inp, True)
 
     ref_out = torch.cummin(ref_inp, dim=dim)
-    with flag_gems.use_gems():
-        res_out = torch.cummin(inp, dim=dim)
+    if flag_gems.vendor_name == "kunlunxin":
+        from flag_gems.runtime.backend._kunlunxin import ops as kl_ops
+
+        res_out = kl_ops.cummin(inp, dim=dim)
+    else:
+        with flag_gems.use_gems():
+            res_out = torch.cummin(inp, dim=dim)
     gems_assert_close(res_out.values, ref_out.values, dtype, reduce_dim=shape[dim])
     gems_assert_equal(res_out.indices, ref_out.indices)
 
@@ -352,8 +357,13 @@ def test_accuracy_cummin_with_nan(shape, dtype, nan_ratio):
     ref_inp = to_reference(inp, True)
 
     ref_out = torch.cummin(ref_inp, dim=dim)
-    with flag_gems.use_gems():
-        res_out = torch.cummin(inp, dim=dim)
+    if flag_gems.vendor_name == "kunlunxin":
+        from flag_gems.runtime.backend._kunlunxin import ops as kl_ops
+
+        res_out = kl_ops.cummin(inp, dim=dim)
+    else:
+        with flag_gems.use_gems():
+            res_out = torch.cummin(inp, dim=dim)
 
     gems_assert_close(
         res_out.values, ref_out.values, dtype, reduce_dim=shape[dim], equal_nan=True
@@ -1491,6 +1501,9 @@ def test_index_put__acc_false(input_shape, indices_shape, values_shape, dtype):
 )
 @pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
 def test_index_put__acc_true(input_shape, indices_shape, values_shape, dtype):
+    if flag_gems.vendor_name == "metax":
+        torch.manual_seed(0)
+        torch.cuda.manual_seed_all(0)
     if flag_gems.vendor_name == "kunlunxin":
         torch.manual_seed(0)
         torch.cuda.manual_seed_all(0)
@@ -1545,6 +1558,9 @@ def test_accuracy_index(input_shape, indices_shape, dtype):
 @pytest.mark.parametrize("shape", REDUCTION_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_accuracy_mse_loss(shape, dtype, reduction):
+    if flag_gems.vendor_name == "metax":
+        torch.manual_seed(0)
+        torch.cuda.manual_seed_all(0)
     if flag_gems.vendor_name == "kunlunxin":
         torch.manual_seed(0)
         torch.cuda.manual_seed_all(0)
@@ -1581,7 +1597,7 @@ def generate_test_params():
     return params
 
 
-@pytest.mark.skipif(flag_gems.vendor_name == "metax", reason="RunetimeError")
+@pytest.mark.skipif(flag_gems.vendor_name == "metax", reason="RuntimeError")
 @pytest.mark.topk_softmax
 @pytest.mark.parametrize("index_dtype", generate_test_params())
 @pytest.mark.parametrize(
