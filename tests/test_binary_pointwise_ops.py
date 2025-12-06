@@ -1,6 +1,5 @@
 import logging
 import math
-import os
 import random
 
 import numpy as np
@@ -871,10 +870,6 @@ def test_accuracy_remainder(shape, dtype):
 @pytest.mark.parametrize("shape", POINTWISE_SHAPES)
 @pytest.mark.parametrize("dtype", INT_DTYPES)
 def test_accuracy_remainder_(shape, dtype):
-    if flag_gems.vendor_name == "mthreads":
-        # Compatible with older versions of LLVM
-        os.environ["DISABLE_LLVM_OPT"] = "1"
-
     inp1 = torch.randint(
         torch.iinfo(dtype).min, torch.iinfo(dtype).max, shape, dtype=dtype, device="cpu"
     ).to(flag_gems.device)
@@ -900,10 +895,6 @@ def test_accuracy_remainder_(shape, dtype):
         with flag_gems.use_gems():
             res_out = inp1.remainder_(d)
         gems_assert_equal(res_out, ref_out)
-
-    if flag_gems.vendor_name == "mthreads":
-        # Compatible with older versions of LLVM
-        del os.environ["DISABLE_LLVM_OPT"]
 
 
 @pytest.mark.eq
@@ -1893,8 +1884,8 @@ def test_accuracy_polar(shape, dtype):
 @pytest.mark.parametrize("shape", POINTWISE_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_accuracy_lerp(shape, dtype):
-    if flag_gems.vendor_name == "kunlunxin" and dtype is torch.half:
-        pytest.skip("wait lerp cpu half impl")
+    # if flag_gems.vendor_name == "kunlunxin" and dtype is torch.half:
+    #     pytest.skip("wait lerp cpu half impl")
 
     torch.manual_seed(0)
 
@@ -1927,8 +1918,8 @@ def test_accuracy_lerp(shape, dtype):
 @pytest.mark.parametrize("shape", POINTWISE_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_accuracy_lerp_(shape, dtype):
-    if flag_gems.vendor_name == "kunlunxin" and dtype is torch.half:
-        pytest.skip("wait lerp cpu half impl")
+    # if flag_gems.vendor_name == "kunlunxin" and dtype is torch.half:
+    #     pytest.skip("wait lerp cpu half impl")
 
     torch.manual_seed(0)
 

@@ -11,6 +11,7 @@ from benchmark.performance_utils import (
     GenericBenchmark2DOnly,
     GenericBenchmarkExcluse1D,
     GenericBenchmarkExcluse3D,
+    SkipVersion,
     generate_tensor_input,
     vendor_name,
 )
@@ -109,7 +110,6 @@ def test_perf_unique():
 
 
 @pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RuntimeError")
-@pytest.mark.skipif(vendor_name == "kunlunxin", reason="RESULT TODOFIX")
 @pytest.mark.sort
 def test_perf_sort():
     class SortBenchmark(GenericBenchmark2DOnly):
@@ -173,24 +173,36 @@ class EmbeddingBenchmark(GenericBenchmark2DOnly):
         return None
 
 
+def embedding_input_fn(shape, dtype, device):
+    num_embeddings, embedding_dim = shape
+    indices = torch.randint(0, num_embeddings, (num_embeddings,), device=device)
+    weight = torch.randn((num_embeddings, embedding_dim), device=device, dtype=dtype)
+    yield {"input": indices, "weight": weight},
+    if Config.bench_level == BenchLevel.COMPREHENSIVE:
+        indices_2d = torch.randint(
+            0,
+            num_embeddings,
+            (num_embeddings, num_embeddings),
+            device=device,
+        )
+        yield {"input": indices_2d, "weight": weight},
+
+
+def embedding_backward_input_fn(shape, dtype, device):
+    for forward_args in embedding_input_fn(shape, dtype, device):
+        # print(f'forward_args = {forward_args}')
+        input = forward_args[0]["input"]
+        weight = forward_args[0]["weight"]
+        # print(f'weight = {weight}')
+        weight.requires_grad_(True)
+        # import pudb; pudb.set_trace()
+        # output = torch.nn.functional.embedding(input, weight)
+        # grad_output = torch.randn_like(output)
+        yield input, weight
+
+
 @pytest.mark.embedding
 def test_perf_embedding():
-    def embedding_input_fn(shape, dtype, device):
-        num_embeddings, embedding_dim = shape
-        indices = torch.randint(0, num_embeddings, (num_embeddings,), device=device)
-        weight = torch.randn(
-            (num_embeddings, embedding_dim), device=device, dtype=dtype
-        )
-        yield {"input": indices, "weight": weight},
-        if Config.bench_level == BenchLevel.COMPREHENSIVE:
-            indices_2d = torch.randint(
-                0,
-                num_embeddings,
-                (num_embeddings, num_embeddings),
-                device=device,
-            )
-            yield {"input": indices_2d, "weight": weight},
-
     bench = EmbeddingBenchmark(
         input_fn=embedding_input_fn,
         op_name="embedding",
@@ -199,6 +211,21 @@ def test_perf_embedding():
             torch.float32,
             torch.float16,
         ],  # Note(Zhengzekang): triton do not support bfloat16 atomic add which is used in embedding grad.
+    )
+    bench.run()
+
+
+@pytest.mark.embedding_backward
+def test_perf_embedding_backward():
+    bench = EmbeddingBenchmark(
+        input_fn=embedding_backward_input_fn,
+        op_name="embedding",
+        torch_op=torch.nn.functional.embedding,
+        dtypes=[
+            torch.float32,
+            torch.float16,
+        ],  # Note(Zhengzekang): triton do not support bfloat16 atomic add which is used in embedding grad.
+        is_backward=True,
     )
     bench.run()
 
@@ -247,7 +274,6 @@ class UpsampleBenchmark(GenericBenchmark):
         return None
 
 
-@pytest.mark.skipif(vendor_name == "kunlunxin", reason="RESULT TODOFIX")
 @pytest.mark.upsample_bicubic2d_aa
 def test_perf_upsample_bicubic2d_aa():
     def upsample_bicubic2d_aa_input_fn(shape, dtype, device):
@@ -266,11 +292,17 @@ def test_perf_upsample_bicubic2d_aa():
             "scales_w": None,
         },
 
+    if vendor_name == "cambricon":
+        dtypes = [torch.float32]
+    elif vendor_name == "kunlunxin":
+        dtypes = [torch.float32, torch.float16]
+    else:
+        dtypes = FLOAT_DTYPES
     bench = UpsampleBenchmark(
         input_fn=upsample_bicubic2d_aa_input_fn,
         op_name="upsample_bicubic2d_aa",
         torch_op=torch._C._nn._upsample_bicubic2d_aa,
-        dtypes=[torch.float32] if vendor_name == "cambricon" else FLOAT_DTYPES,
+        dtypes=dtypes,
     )
     bench.run()
 
@@ -298,105 +330,6 @@ def test_perf_upsample_nearest2d():
         torch_op=torch._C._nn.upsample_nearest2d,
         dtypes=FLOAT_DTYPES,
     )
-    bench.run()
-
-
-class ConvBenchmark(GenericBenchmark):
-    def set_more_shapes(self):
-        # self.shapes is a list of tuples, each containing three elements:
-        # (N, C, H, W).
-        return None
-
-
-@pytest.mark.skipif(True, reason="Conv2d not registered yet")
-@pytest.mark.conv2d
-def test_perf_conv2d():
-    def conv2d_input_fn(shape, dtype, device):
-        (
-            batch,
-            input_c,
-            input_h,
-            input_w,
-            out_c,
-            kernel_h,
-            kernel_w,
-            stride,
-            padding,
-            groups,
-        ) = shape
-        input_shape = (batch, input_c, input_h, input_w)
-        weight_shape = (out_c, input_c // groups, kernel_h, kernel_w)
-        input = torch.randn(size=input_shape, device=device, dtype=dtype)
-
-        weight = torch.randn(size=weight_shape, device=device, dtype=dtype)
-
-        yield {
-            "input": input,
-            "weight": weight,
-            "bias": None,
-            "groups": groups,
-            "stride": stride,
-            "padding": padding,
-        },
-
-    torch.backends.cudnn.allow_tf32 = False
-    bench = ConvBenchmark(
-        input_fn=conv2d_input_fn,
-        op_name="conv2d",
-        torch_op=torch.nn.functional.conv2d,
-        dtypes=FLOAT_DTYPES,
-    )
-    bench.run()
-
-
-class Conv3DBenchmark(GenericBenchmark):
-    def set_more_shapes(self):
-        # self.shapes is a list of tuples, each containing three elements:
-        # (N, C, H, W).
-        return None
-
-
-# @pytest.mark.skipif(True, reason="Conv3d not registered yet")
-@pytest.mark.conv3d
-def test_perf_conv3d():
-    def conv3d_input_fn(shape, dtype, device):
-        (
-            batch,
-            input_c,
-            input_d,
-            input_h,
-            input_w,
-            out_c,
-            kernel_d,
-            kernel_h,
-            kernel_w,
-            stride,
-            padding,
-            groups,
-        ) = shape
-        input_shape = (batch, input_c, input_d, input_h, input_w)
-        weight_shape = (out_c, input_c // groups, kernel_d, kernel_h, kernel_w)
-        input = torch.randn(size=input_shape, device=device, dtype=dtype)
-
-        weight = torch.randn(size=weight_shape, device=device, dtype=dtype)
-
-        yield {
-            "input": input,
-            "weight": weight,
-            "bias": None,
-            "groups": groups,
-            "stride": stride,
-            "padding": padding,
-        },
-
-    torch.backends.cudnn.allow_tf32 = False
-    bench = Conv3DBenchmark(
-        input_fn=conv3d_input_fn,
-        op_name="conv3d",
-        torch_op=torch.nn.functional.conv3d,
-        dtypes=FLOAT_DTYPES,
-    )
-    bench.set_gems(flag_gems.conv3d)
     bench.run()
 
 
@@ -457,7 +390,10 @@ def test_perf_diagonal_backward():
     bench.run()
 
 
-@pytest.mark.skipif(vendor_name == "kunlunxin", reason="RESULT TODOFIX")
+@pytest.mark.skipif(
+    vendor_name == "kunlunxin" and SkipVersion("torch", "<2.5"),
+    reason="only support torch >= 2.5.",
+)
 @pytest.mark.skipif(vendor_name == "cambricon", reason="TODOFIX")
 @pytest.mark.kron
 def test_perf_kron():
@@ -578,6 +514,40 @@ def test_perf_rwkv_ka_fusion():
     bench = RWKVBenchmark(
         input_fn=rwkv_ka_fusion_input_fn,
         op_name="rwkv_ka_fusion",
+        torch_op=torch_op,
+        dtypes=FLOAT_DTYPES,
+    )
+    bench.set_gems(gems_op)
+    bench.run()
+
+
+@pytest.mark.moe_sum
+def test_perf_moe_sum():
+    def moe_sum_input_fn(shape, dtype, device):
+        shape = (shape[0], 1, shape[1]) if len(shape) == 2 else shape
+        num_tokens, topk, hidden_size = shape
+        input_tensor = torch.randn(
+            num_tokens,
+            topk,
+            hidden_size,
+            dtype=dtype,
+            device=device,
+            requires_grad=False,
+        )
+
+        output_tensor = torch.empty(
+            num_tokens, hidden_size, dtype=dtype, device=device, requires_grad=False
+        )
+        yield input_tensor, output_tensor
+
+    def torch_op(input_tensor, output_tensor):
+        output_tensor.copy_(input_tensor.sum(dim=1))
+
+    gems_op = flag_gems.moe_sum
+
+    bench = GenericBenchmarkExcluse1D(
+        input_fn=moe_sum_input_fn,
+        op_name="moe_sum",
         torch_op=torch_op,
         dtypes=FLOAT_DTYPES,
     )
