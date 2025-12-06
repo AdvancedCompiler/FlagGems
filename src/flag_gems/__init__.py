@@ -10,14 +10,11 @@ from flag_gems.logging_utils import setup_flaggems_logging
 from flag_gems.modules import *  # noqa: F403
 from flag_gems.ops import *  # noqa: F403
 from flag_gems.patches import *  # noqa: F403
-from flag_gems.runtime.dispatcher import op_dispatcher
 from flag_gems.runtime.register import Register
 
-__version__ = "3.0"
+__version__ = "4.1"
 device = runtime.device.name
 vendor_name = runtime.device.vendor_name
-dispatched_op_vendor = op_dispatcher.operator_vendor
-dispatched_config_vendor = op_dispatcher.config_vendor
 aten_lib = torch.library.Library("aten", "IMPL")
 registrar = Register
 current_work_registrar = None
@@ -45,6 +42,7 @@ def enable(
             ("_upsample_bicubic2d_aa", _upsample_bicubic2d_aa),
             ("_weight_norm_interface", weight_norm_interface),
             ("_weight_norm_interface_backward", weight_norm_interface_backward),
+            ("moe_sum", moe_sum),
             ("abs", abs),
             ("abs_", abs_),
             ("add.Tensor", add),
@@ -72,6 +70,7 @@ def enable(
             ("avg_pool2d_backward", avg_pool2d_backward),
             ("atan", atan),
             ("atan_", atan_),
+            ("baddbmm", baddbmm),
             ("bitwise_and.Scalar", bitwise_and_scalar),
             ("bitwise_and.Scalar_Tensor", bitwise_and_scalar_tensor),
             ("bitwise_and.Tensor", bitwise_and_tensor),
@@ -97,9 +96,12 @@ def enable(
             ("clamp_.Tensor", clamp_tensor_),
             ("clamp_min_", clamp_min_),
             ("constant_pad_nd", constant_pad_nd),
-            ("contiguous", contiguous),
+            # ("contiguous", contiguous),
+            ("copy_", copy_),
             ("cos", cos),
             ("cos_", cos_),
+            ("tan", tan),
+            ("tan_", tan_),
             ("count_nonzero", count_nonzero),
             ("cummax", cummax),
             ("cummin", cummin),
@@ -136,6 +138,7 @@ def enable(
             ("erf_", erf_),
             ("exp", exp),
             ("exp_", exp_),
+            ("exp.out", exp_out),
             ("exp2", exp2),
             ("exp2_", exp2_),
             ("exponential_", exponential_),
@@ -156,6 +159,8 @@ def enable(
             ("gather_backward", gather_backward),
             ("ge.Scalar", ge_scalar),
             ("ge.Tensor", ge),
+            ("geglu", geglu),
+            ("dgeglu", dgeglu),
             ("gelu", gelu),
             ("gelu_", gelu_),
             ("gelu_backward", gelu_backward),
@@ -164,7 +169,7 @@ def enable(
             ("gt.Scalar", gt_scalar),
             ("gt.Tensor", gt),
             ("hstack", hstack),
-            # ("index.Tensor", index),
+            ("index.Tensor", index),
             ("index_add", index_add),
             ("index_add_", index_add_),
             ("index_put", index_put),
@@ -249,6 +254,7 @@ def enable(
             ("pow_.Tensor", pow_tensor_tensor_),
             ("prod", prod),
             ("prod.dim_int", prod_dim),
+            ("per_token_group_quant_fp8", per_token_group_quant_fp8),
             ("quantile", quantile),
             ("rand", rand),
             ("rand_like", rand_like),

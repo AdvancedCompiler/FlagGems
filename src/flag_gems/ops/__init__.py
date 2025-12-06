@@ -21,6 +21,7 @@ from flag_gems.ops.attention import (
     scaled_dot_product_attention_backward,
 )
 from flag_gems.ops.avg_pool2d import avg_pool2d, avg_pool2d_backward
+from flag_gems.ops.baddbmm import baddbmm
 from flag_gems.ops.batch_norm import batch_norm, batch_norm_backward
 from flag_gems.ops.bitwise_and import (
     bitwise_and_scalar,
@@ -55,6 +56,7 @@ from flag_gems.ops.conv1d import conv1d
 from flag_gems.ops.conv2d import conv2d
 from flag_gems.ops.conv3d import conv3d
 from flag_gems.ops.conv_depthwise2d import _conv_depthwise2d
+from flag_gems.ops.copy import copy, copy_
 from flag_gems.ops.cos import cos, cos_
 from flag_gems.ops.count_nonzero import count_nonzero
 from flag_gems.ops.cummax import cummax
@@ -79,7 +81,7 @@ from flag_gems.ops.elu import elu, elu_, elu_backward
 from flag_gems.ops.embedding import embedding, embedding_backward
 from flag_gems.ops.eq import eq, eq_scalar
 from flag_gems.ops.erf import erf, erf_
-from flag_gems.ops.exp import exp, exp_
+from flag_gems.ops.exp import exp, exp_, exp_out
 from flag_gems.ops.exp2 import exp2, exp2_
 from flag_gems.ops.exponential_ import exponential_
 from flag_gems.ops.eye import eye
@@ -153,6 +155,10 @@ from flag_gems.ops.normal import (
 from flag_gems.ops.ones import ones
 from flag_gems.ops.ones_like import ones_like
 from flag_gems.ops.pad import constant_pad_nd, pad
+from flag_gems.ops.per_token_group_quant_fp8 import (
+    SUPPORTED_FP8_DTYPE,
+    per_token_group_quant_fp8,
+)
 from flag_gems.ops.polar import polar
 from flag_gems.ops.pow import (
     pow_scalar,
@@ -194,6 +200,7 @@ from flag_gems.ops.stack import stack
 from flag_gems.ops.std import std
 from flag_gems.ops.sub import sub, sub_
 from flag_gems.ops.sum import sum, sum_dim, sum_dim_out, sum_out
+from flag_gems.ops.tan import tan, tan_
 from flag_gems.ops.tanh import tanh, tanh_, tanh_backward
 from flag_gems.ops.threshold import threshold, threshold_backward
 from flag_gems.ops.tile import tile
@@ -252,6 +259,7 @@ __all__ = [
     "avg_pool2d_backward",
     "atan",
     "atan_",
+    "baddbmm",
     "batch_norm",
     "batch_norm_backward",
     "bitwise_and_scalar",
@@ -283,6 +291,8 @@ __all__ = [
     "conv1d",
     "conv2d",
     "conv3d",
+    "copy",
+    "copy_",
     "cos",
     "cos_",
     "count_nonzero",
@@ -309,6 +319,7 @@ __all__ = [
     "erf_",
     "exp",
     "exp_",
+    "exp_out",
     "exp2",
     "exp2_",
     "exponential_",
@@ -468,6 +479,8 @@ __all__ = [
     "sum_dim",
     "sum_dim_out",
     "sum_out",
+    "tan",
+    "tan_",
     "tanh",
     "tanh_",
     "tanh_backward",
@@ -487,6 +500,8 @@ __all__ = [
     "addr",
     "vector_norm",
     "vstack",
+    "per_token_group_quant_fp8",
+    "SUPPORTED_FP8_DTYPE",
     "weight_norm_interface",
     "weight_norm_interface_backward",
     "where_scalar_other",

@@ -5,7 +5,6 @@ import triton
 
 from . import backend
 from .backend.device import DeviceDetector
-from .dispatcher import op_dispatcher
 
 
 class ConfigLoader(object):
@@ -22,10 +21,22 @@ class ConfigLoader(object):
             self.device = DeviceDetector()
             # primitive_yaml_config is simply the dictionary returned by yaml
             # and is reserved from being an attr for vendor customizability
+            self.arch_specialized_yaml_config = None
+            self.arch_heuristics_config = None
             self.vendor_primitive_yaml_config = self.get_vendor_tune_config()
             self.default_primitive_yaml_config = self.get_default_tune_config()
             self.vendor_heuristics_config = self.get_vendor_heuristics_config()
             self.default_heuristics_config = self.get_default_heuristics_config()
+            try:
+                if backend.BackendArchEvent().has_arch:
+                    self.arch_specialized_yaml_config = (
+                        backend.BackendArchEvent().autotune_configs
+                    )
+                    self.arch_heuristics_config = (
+                        backend.BackendArchEvent().heuristics_configs
+                    )
+            except Exception as err:
+                print(f"[INFO] : {err}")
 
             if self.vendor_heuristics_config is None:
                 vendorname = self.device.vendor_name
@@ -55,10 +66,7 @@ class ConfigLoader(object):
             self.loaded_triton_config[key] = self.get_tuned_config(key)
 
     def get_vendor_heuristics_config(self):
-        if op_dispatcher.is_dispatch_configs:
-            return op_dispatcher.configurations["heuristic"]
-        else:
-            return backend.get_heuristic_config(self.device.vendor_name)
+        return backend.get_heuristic_config(self.device.vendor_name)
 
     def get_default_heuristics_config(self):
         return backend.get_heuristic_config("nvidia")
@@ -67,13 +75,12 @@ class ConfigLoader(object):
         return backend.get_tune_config("nvidia")
 
     def get_vendor_tune_config(self):
-        if op_dispatcher.is_dispatch_configs:
-            return op_dispatcher.configurations["autotune"]
-        else:
-            return backend.get_tune_config(self.device.vendor_name)
+        return backend.get_tune_config(self.device.vendor_name)
 
     def get_heuristics_config(self, op_name):
-        if op_name in self.vendor_heuristics_config:
+        if self.arch_heuristics_config and op_name in self.arch_heuristics_config:
+            return self.arch_heuristics_config[op_name]
+        elif op_name in self.vendor_heuristics_config:
             return self.vendor_heuristics_config[op_name]
         elif op_name in self.default_heuristics_config:
             return self.default_heuristics_config[op_name]
@@ -149,7 +156,12 @@ class ConfigLoader(object):
         if op_name in self.loaded_triton_config:
             return self.loaded_triton_config[op_name]
 
-        if op_name in self.vendor_primitive_yaml_config:
+        if (
+            self.arch_specialized_yaml_config
+            and op_name in self.arch_specialized_yaml_config
+        ):
+            current_op_configs = self.arch_specialized_yaml_config[op_name]
+        elif op_name in self.vendor_primitive_yaml_config:
             current_op_configs = self.vendor_primitive_yaml_config[op_name]
         else:
             current_op_configs = self.default_primitive_yaml_config[op_name]
