@@ -32,6 +32,7 @@ from .accuracy_utils import (
     unsqueeze_tensor,
     unsqueeze_tuple,
 )
+from .conftest import TO_CPU
 
 
 @pytest.mark.abs
@@ -332,7 +333,7 @@ def test_accuracy_exp2_(shape, dtype):
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 @pytest.mark.skipif(not TE_AVAILABLE, reason="transformer engine is not available")
 def test_accuracy_geglu(shape, dtype):
-    if len(shape) == 0:
+    if len(shape) == 0 or TO_CPU:
         pytest.skip("GEGLU does not support 0-dim scalar tensors.")
 
     if shape[-1] % 2 != 0:
@@ -354,7 +355,7 @@ def test_accuracy_geglu(shape, dtype):
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 @pytest.mark.skipif(not TE_AVAILABLE, reason="transformer engine is not available")
 def test_accuracy_dreglu(shape, dtype):
-    if len(shape) == 0:
+    if len(shape) == 0 or TO_CPU:
         pytest.skip("dreglu does not support 0-dim scalar tensors.")
 
     if shape[-1] % 2 != 0:
@@ -1260,7 +1261,10 @@ def test_copy_inplace_mixed_dtype_triton(src_dtype, dst_dtype):
         base = torch.tensor([True, False, True, True, False, True, False, True])
         src = base.to(device=device)
     else:
-        src = torch.arange(numel, device=device, dtype=src_dtype)
+        if flag_gems.vendor_name == "mthreads":
+            src = torch.arange(numel, device="cpu", dtype=src_dtype).to(device)
+        else:
+            src = torch.arange(numel, device=device, dtype=src_dtype)
 
     dst = torch.zeros(numel, dtype=dst_dtype, device=device)
 
