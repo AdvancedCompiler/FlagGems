@@ -96,6 +96,7 @@ def test_general_unary_pointwise_perf(op_name, torch_op, dtypes):
 
 forward_inplace_operations = [
     ("abs_", torch.abs_, FLOAT_DTYPES),
+    # ("angle", torch.angle, COMPLEX_DTYPES + [torch.float32] + INT_DTYPES + BOOL_DTYPES),
     ("erf_", torch.erf_, FLOAT_DTYPES),
     ("exp_", torch.exp_, FLOAT_DTYPES),
     ("exp2_", torch.exp2_, FLOAT_DTYPES),
@@ -265,8 +266,8 @@ class BinaryPointwiseBenchmark(Benchmark):
     def get_input_iter(self, cur_dtype) -> Generator:
         for shape in self.shapes:
             inp1 = generate_tensor_input(shape, cur_dtype, self.device)
-            shift_amount = torch.randint(
-                0, 8, shape, dtype=cur_dtype, device=self.device
+            shift_amount = torch.randint(0, 8, shape, dtype=cur_dtype, device="cpu").to(
+                self.device
             )
             yield inp1, shift_amount
 
