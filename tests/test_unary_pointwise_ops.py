@@ -491,7 +491,7 @@ def test_accuracy_swiglu_forward(shape: tuple[int, ...], dtype: torch.dtype):
 
     input_tensor = generate_input(shape, dtype, device)
 
-    te_forward = tex.swiglu(input_tensor, quantizer=None)
+    te_forward = tex.swiglu(input_tensor, quantizer=None).to(device)
 
     with flag_gems.use_gems():
         fg_forward = flag_gems.swiglu(input_tensor, quantizer=None)
@@ -513,7 +513,7 @@ def test_accuracy_swiglu_backward(shape: tuple[int, ...], dtype: torch.dtype):
     grad_shape[-1] = grad_shape[-1] // 2
     grad_output = generate_input(tuple(grad_shape), dtype, device)
 
-    te_grad_input = tex.dswiglu(grad_output, input_tensor, quantizer=None)
+    te_grad_input = tex.dswiglu(grad_output, input_tensor, quantizer=None).to(device)
 
     with flag_gems.use_gems():
         fg_grad_input = flag_gems.dswiglu(grad_output, input_tensor, quantizer=None)
