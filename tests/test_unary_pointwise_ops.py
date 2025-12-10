@@ -20,12 +20,14 @@ from .accuracy_utils import (
     INT_DTYPES,
     POINTWISE_SHAPES,
     SWIGLU_SPECIAL_SHAPES,
+    SkipVersion,
     gems_assert_close,
     gems_assert_equal,
     to_reference,
     unsqueeze_tensor,
     unsqueeze_tuple,
 )
+from .conftest import TO_CPU
 
 
 @pytest.mark.abs
@@ -110,8 +112,10 @@ BITWISE_SHAPES = [
 @pytest.mark.parametrize("dtype", ALL_INT_DTYPES + [torch.uint8])
 def test_accuracy_bitwise_left_shift(shapes, dtype):
     shape_a, shape_b = shapes
-    res_a = torch.randint(0, 100, shape_a, dtype=dtype, device=flag_gems.device)
-    res_b = torch.randint(0, 8, shape_b, dtype=dtype, device=flag_gems.device)
+    res_a = torch.randint(0, 100, shape_a, dtype=dtype, device="cpu").to(
+        flag_gems.device
+    )
+    res_b = torch.randint(0, 8, shape_b, dtype=dtype, device="cpu").to(flag_gems.device)
     ref_a = to_reference(res_a)
     ref_b = to_reference(res_b)
 
@@ -126,8 +130,10 @@ def test_accuracy_bitwise_left_shift(shapes, dtype):
 @pytest.mark.parametrize("dtype", ALL_INT_DTYPES + [torch.uint8])
 def test_accuracy_bitwise_right_shift(shapes, dtype):
     shape_a, shape_b = shapes
-    res_a = torch.randint(0, 100, shape_a, dtype=dtype, device=flag_gems.device)
-    res_b = torch.randint(0, 8, shape_b, dtype=dtype, device=flag_gems.device)
+    res_a = torch.randint(0, 100, shape_a, dtype=dtype, device="cpu").to(
+        flag_gems.device
+    )
+    res_b = torch.randint(0, 8, shape_b, dtype=dtype, device="cpu").to(flag_gems.device)
     ref_a = to_reference(res_a)
     ref_b = to_reference(res_b)
 
@@ -150,8 +156,10 @@ INPLACE_BITWISE_SHAPES = [
 @pytest.mark.parametrize("dtype", ALL_INT_DTYPES + [torch.uint8])
 def test_accuracy_bitwise_left_shift_(shapes, dtype):
     shape_a, shape_b = shapes
-    res_a = torch.randint(0, 100, shape_a, dtype=dtype, device=flag_gems.device)
-    res_b = torch.randint(0, 8, shape_b, dtype=dtype, device=flag_gems.device)
+    res_a = torch.randint(0, 100, shape_a, dtype=dtype, device="cpu").to(
+        flag_gems.device
+    )
+    res_b = torch.randint(0, 8, shape_b, dtype=dtype, device="cpu").to(flag_gems.device)
     ref_a = to_reference(res_a.clone())
     ref_b = to_reference(res_b)
 
@@ -166,8 +174,10 @@ def test_accuracy_bitwise_left_shift_(shapes, dtype):
 @pytest.mark.parametrize("dtype", ALL_INT_DTYPES + [torch.uint8])
 def test_accuracy_bitwise_right_shift_(shapes, dtype):
     shape_a, shape_b = shapes
-    res_a = torch.randint(0, 100, shape_a, dtype=dtype, device=flag_gems.device)
-    res_b = torch.randint(0, 8, shape_b, dtype=dtype, device=flag_gems.device)
+    res_a = torch.randint(0, 100, shape_a, dtype=dtype, device="cpu").to(
+        flag_gems.device
+    )
+    res_b = torch.randint(0, 8, shape_b, dtype=dtype, device="cpu").to(flag_gems.device)
     ref_a = to_reference(res_a.clone())
     ref_b = to_reference(res_b)
 
@@ -326,7 +336,7 @@ def test_accuracy_exp2_(shape, dtype):
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 @pytest.mark.skipif(not TE_AVAILABLE, reason="transformer engine is not available")
 def test_accuracy_geglu(shape, dtype):
-    if len(shape) == 0:
+    if len(shape) == 0 or TO_CPU:
         pytest.skip("GEGLU does not support 0-dim scalar tensors.")
 
     if shape[-1] % 2 != 0:
@@ -348,7 +358,7 @@ def test_accuracy_geglu(shape, dtype):
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 @pytest.mark.skipif(not TE_AVAILABLE, reason="transformer engine is not available")
 def test_accuracy_dreglu(shape, dtype):
-    if len(shape) == 0:
+    if len(shape) == 0 or TO_CPU:
         pytest.skip("dreglu does not support 0-dim scalar tensors.")
 
     if shape[-1] % 2 != 0:
@@ -1247,6 +1257,10 @@ def test_accuracy_to_copy_preserve_strides(memory_format):
 @pytest.mark.copy_
 @pytest.mark.parametrize("shape", POINTWISE_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+@pytest.mark.skipif(
+    SkipVersion("torch", "<2.4"),
+    reason="The copy operator implement required for torch >= 2.4",
+)
 def test_copy_inplace_same_dtype(shape, dtype):
     src = torch.randn(shape, dtype=dtype, device=flag_gems.device)
     ref_src = to_reference(src)
@@ -1262,6 +1276,10 @@ def test_copy_inplace_same_dtype(shape, dtype):
 
 @pytest.mark.inplace
 @pytest.mark.copy_
+@pytest.mark.skipif(
+    SkipVersion("torch", "<2.4"),
+    reason="The copy operator implement required for torch >= 2.4",
+)
 def test_copy_inplace_broadcast():
     dst_shape = (2, 3)
     src = torch.arange(0, 3, dtype=torch.float32, device=flag_gems.device)
@@ -1280,6 +1298,10 @@ def test_copy_inplace_broadcast():
 
 @pytest.mark.inplace
 @pytest.mark.copy_
+@pytest.mark.skipif(
+    SkipVersion("torch", "<2.4"),
+    reason="The copy operator implement required for torch >= 2.4",
+)
 def test_copy_inplace_dtype_fallback():
     src = torch.arange(0, 8, dtype=torch.int32, device=flag_gems.device)
     ref_src = to_reference(src)
@@ -1297,6 +1319,10 @@ def test_copy_inplace_dtype_fallback():
 
 @pytest.mark.inplace
 @pytest.mark.copy_
+@pytest.mark.skipif(
+    SkipVersion("torch", "<2.4"),
+    reason="The copy operator implement required for torch >= 2.4",
+)
 @pytest.mark.parametrize(
     "src_dtype,dst_dtype",
     [
@@ -1313,7 +1339,10 @@ def test_copy_inplace_mixed_dtype_triton(src_dtype, dst_dtype):
         base = torch.tensor([True, False, True, True, False, True, False, True])
         src = base.to(device=device)
     else:
-        src = torch.arange(numel, device=device, dtype=src_dtype)
+        if flag_gems.vendor_name == "mthreads":
+            src = torch.arange(numel, device="cpu", dtype=src_dtype).to(device)
+        else:
+            src = torch.arange(numel, device=device, dtype=src_dtype)
 
     dst = torch.zeros(numel, dtype=dst_dtype, device=device)
 
