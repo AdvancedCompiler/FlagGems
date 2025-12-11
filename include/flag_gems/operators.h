@@ -59,7 +59,6 @@ std::tuple<at::Tensor, at::Tensor> topk(
 at::Tensor contiguous(const at::Tensor &self, at::MemoryFormat memory_format = c10::MemoryFormat::Contiguous);
 at::Tensor cat(const at::TensorList &tensors, int64_t dim = 0);
 at::Tensor bmm(const at::Tensor &A, const at::Tensor &B);
-at::Tensor argmax(const at::Tensor &self, std::optional<int64_t> dim = std::nullopt, bool keepdim = false);
 at::Tensor embedding(const at::Tensor &weight,
                      const at::Tensor &indices,
                      int64_t padding_idx = -1,
