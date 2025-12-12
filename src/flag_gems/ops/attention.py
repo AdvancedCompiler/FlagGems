@@ -922,8 +922,18 @@ def scaled_dot_product_attention_backward(
 
     # NOTE that dk & dv always have the same number of heads as q
     dq = torch.empty_like(query).contiguous()
-    dk = torch.empty((BATCH, Q_HEAD, KV_CTX, HEAD_DIM_K)).to(key.device).contiguous()
-    dv = torch.empty((BATCH, Q_HEAD, KV_CTX, HEAD_DIM_V)).to(value.device).contiguous()
+    dk = torch.empty(
+        (BATCH, Q_HEAD, KV_CTX, HEAD_DIM_K),
+        device=key.device,
+        dtype=key.dtype,
+        memory_format=torch.contiguous_format,
+    )
+    dv = torch.empty(
+        (BATCH, Q_HEAD, KV_CTX, HEAD_DIM_V),
+        device=value.device,
+        dtype=value.dtype,
+        memory_format=torch.contiguous_format,
+    )
 
     _attn_bwd_preprocess[pre_grid](
         o,
@@ -1177,7 +1187,11 @@ def flash_attn_varlen_func(
     q_descale=None,
     k_descale=None,
     v_descale=None,
+    s_aux=None,
     num_splits: int = 0,
+    cp_world_size: int = 1,
+    cp_rank: int = 0,
+    cp_tot_seqused_k=None,
     fa_version: int = 2,
 ):
     """dropout_p should be set to 0.0 during evaluation
@@ -1232,6 +1246,10 @@ def flash_attn_varlen_func(
             logsumexp of each row of the matrix QK^T * scaling (e.g., log of the softmax
             normalization factor).
     """
+    if fa_version != 2:
+        raise RuntimeError("Only FA2 is implemented.")
+    if num_splits > 0:
+        raise RuntimeError("num_splits > 0 is not implemented in GEMS.")
     if use_c_extension:
         logger.debug("GEMS FLASH_ATTN_VARLEN_FUNC(C EXTENSION)")
         with torch_device_fn.device(q.device):
@@ -1260,6 +1278,11 @@ def flash_attn_varlen_func(
                 q_descale,
                 k_descale,
                 v_descale,
+                s_aux,
+                num_splits,
+                cp_world_size,
+                cp_rank,
+                cp_tot_seqused_k,
                 fa_version,
             )
         return (out_cpp, softmax_lse) if return_softmax_lse else out_cpp
@@ -1284,10 +1307,6 @@ def flash_attn_varlen_func(
             real_window_size = (window_size[0], window_size[1])
         q, k, v = [maybe_contiguous(x) for x in (q, k, v)]
         dummy_cu_seqlens_k = torch.empty_like(cu_seqlens_q)
-        if fa_version != 2:
-            raise RuntimeError("Only FA2 is implemented.")
-        if num_splits > 0:
-            raise RuntimeError("num_splits > 0 is not implemented in GEMS.")
         max_seqlen_q = (
             max_seqlen_q.item() if hasattr(max_seqlen_q, "item") else max_seqlen_q
         )
