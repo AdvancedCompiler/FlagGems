@@ -37,24 +37,11 @@ def broadcast_indices(indices, target_shape):
 def generate_imports(code: IndentedBuffer) -> IndentedBuffer:
     code.writeline("import triton")
     code.writeline("import triton.language as tl")
-    code.writeline("import builtins")
     code.newline()
-    code.writeline("from flag_gems.utils import libentry")
+    code.writeline("from flag_gems.utils import libentry, libtuner")
     code.writeline("from flag_gems import runtime")
     code.writeline("from flag_gems.utils.shape_utils import volume")
-
-    code.newline()
-    code.newline()
-
-    code.writeline("def heur_block_m(args):")
-    with code.indent():
-        code.writeline('return triton.next_power_of_2(triton.cdiv(args["M"], 12))')
-
-    code.newline()
-
-    code.writeline("def heur_block_n(args):")
-    with code.indent():
-        code.writeline('return builtins.min(triton.next_power_of_2(args["N"]), 8192)')
+    code.writeline("from flag_gems.utils import triton_lang_extension as tle")
 
     code.newline()
     code.newline()
@@ -65,36 +52,27 @@ def generate_index_put_kernel(
     inp_rank, indices_len, index_rank, kernel_name: str, code: IndentedBuffer
 ):
     code.writeline("@libentry()")
-    # code.writeline(
-    #     '@triton.autotune(configs=runtime.get_tuned_config("index_put"), key=["M", "N"], restore_value=["input_ptr"])'
-    # )
-    code.writeline("@triton.heuristics(")
-    with code.indent():
-        code.writeline("values={")
-        with code.indent():
-            code.writeline('"BLOCK_SIZE0": heur_block_m,')
-            code.writeline('"BLOCK_SIZE1": heur_block_n,')
-        code.writeline("},")
-    code.writeline(")")
+    code.writeline(
+        '@triton.autotune(configs=runtime.get_tuned_config("index_put"), key=["M", "N"], restore_value=["input_ptr"])'
+    )
     code.writeline("@triton.jit")
     code.writeline(f"def {kernel_name}(")
     with code.indent():
         args = ["input_ptr,"]
         args += [f"indices{i}_ptr," for i in range(indices_len)]
         args += ["values_ptr,"]
-        args += [f"input_shape{i}: tl.constexpr," for i in range(inp_rank)]
+        args += [f"input_shape{i}," for i in range(inp_rank)]
         for i in range(indices_len):
-            args += [f"indices{i}_shape{j}: tl.constexpr," for j in range(index_rank)]
-        args += [f"input_stride{i}: tl.constexpr," for i in range(inp_rank)]
+            args += [f"indices{i}_shape{j}," for j in range(index_rank)]
+        args += [f"input_stride{i}," for i in range(inp_rank)]
         for i in range(indices_len):
-            args += [f"indices{i}_stride{j}: tl.constexpr," for j in range(index_rank)]
+            args += [f"indices{i}_stride{j}," for j in range(index_rank)]
         args += [
-            f"values_stride{i}: tl.constexpr,"
-            for i in range(index_rank + inp_rank - indices_len)
+            f"values_stride{i}," for i in range(index_rank + inp_rank - indices_len)
         ]
         args += [
-            "M: tl.constexpr,",
-            "N: tl.constexpr,",
+            "M,",
+            "N,",
             "IS_ACCUMULATE: tl.constexpr,",
             "BLOCK_SIZE0: tl.constexpr,",
             "BLOCK_SIZE1: tl.constexpr,",
@@ -103,8 +81,8 @@ def generate_index_put_kernel(
     code.writeline("):")
 
     with code.indent():
-        code.writeline("pid0 = tl.program_id(axis=0)")
-        code.writeline("pid1 = tl.program_id(axis=1)")
+        code.writeline("pid0 = tle.program_id(axis=0)")
+        code.writeline("pid1 = tle.program_id(axis=1)")
         code.writeline(
             "offset0 = pid0 * BLOCK_SIZE0 + tl.arange(0, BLOCK_SIZE0)[:, None]"
         )
