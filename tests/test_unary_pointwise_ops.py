@@ -1380,7 +1380,7 @@ DREGU_SHAPES = [
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 @pytest.mark.skipif(not TE_AVAILABLE, reason="transformer engine is not available")
 def test_accuracy_dreglu(shape, dtype):
-    if len(shape) == 0:
+    if len(shape) == 0 or TO_CPU:
         pytest.skip("dreglu does not support 0-dim scalar tensors.")
 
     if shape[-1] % 2 != 0:
@@ -1424,7 +1424,7 @@ REGLU_SHAPES = [
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 @pytest.mark.skipif(not TE_AVAILABLE, reason="transformer engine is not available")
 def test_accuracy_reglu(shape, dtype):
-    if len(shape) == 0:
+    if len(shape) == 0 or TO_CPU:
         pytest.skip("reglu does not support 0-dim scalar tensors.")
 
     if shape[-1] % 2 != 0:
