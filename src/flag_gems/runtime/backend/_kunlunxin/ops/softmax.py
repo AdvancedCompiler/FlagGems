@@ -9,7 +9,7 @@ from flag_gems.runtime import torch_device_fn
 from flag_gems.utils import libentry
 from flag_gems.utils import triton_lang_extension as tle
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("flag_gems").getChild(__name__.lstrip("."))
 
 
 @triton.jit
@@ -228,6 +228,7 @@ def softmax(self, dim, half_to_float=False):
                 M * K,
                 N,
                 buffer_size_limit=2048,
+                is_use_mask_zero=True,
             )
 
             # 将输出恢复到原始布局
@@ -247,6 +248,7 @@ def softmax(self, dim, half_to_float=False):
                 N,
                 buffer_size_limit=2048,
                 isCloseVectorization=True,
+                is_use_mask_zero=True,
             )
     return out
 

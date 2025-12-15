@@ -1,4 +1,5 @@
 import logging
+import math
 
 import torch
 import triton
@@ -8,7 +9,7 @@ from flag_gems.runtime import torch_device_fn
 from flag_gems.utils import triton_lang_extension as tle
 from flag_gems.utils.shape_utils import volume
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("flag_gems").getChild(__name__.lstrip("."))
 
 
 @triton.jit(do_not_specialize=["fill_value_or_ptr"])
@@ -38,16 +39,22 @@ def check_dtype(fill_value, dtype, device):
     if isinstance(fill_value, bool):
         if dtype != torch.bool:
             fill_value = int(fill_value)
+
     elif (
         dtype in ALL_INT_DTYPES
         and (fill_value < torch.iinfo(dtype).min or fill_value > torch.iinfo(dtype).max)
     ) or (
         dtype in ALL_FLOAT_DTYPES
+        and not (math.isinf(fill_value) or math.isnan(fill_value))
         and (fill_value < torch.finfo(dtype).min or fill_value > torch.finfo(dtype).max)
     ):
         raise RuntimeError(
             f"value cannot be converted to type {dtype} without overflow"
         )
+
+    if dtype == torch.float64:
+        fill_value = torch.tensor(fill_value, dtype=dtype, device=device)
+
     return fill_value
 
 

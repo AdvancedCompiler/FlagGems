@@ -19,6 +19,8 @@ PYBIND11_MODULE(c_operators, m) {
   m.def("rotary_embedding", &flag_gems::rotary_embedding);
   m.def("rotary_embedding_inplace", &flag_gems::rotary_embedding_inplace);
   m.def("bmm", &flag_gems::bmm);
+  m.def("rwkv_mm_sparsity", &flag_gems::rwkv_mm_sparsity);
+  m.def("rwkv_ka_fusion", &flag_gems::rwkv_ka_fusion);
 }
 namespace flag_gems {
 TORCH_LIBRARY(flag_gems, m) {
@@ -60,12 +62,36 @@ TORCH_LIBRARY(flag_gems, m) {
       "embedding_backward(Tensor grad_outputs, Tensor indices, SymInt num_weights, SymInt padding_idx, bool "
       "scale_grad_by_freq, bool sparse) -> Tensor");
   m.def("argmax(Tensor self, int? dim=None, bool keepdim=False) -> Tensor");
+  // sort
+  m.def("sort(Tensor self, int dim=-1, bool descending=False) -> (Tensor values, Tensor indices)");
+  m.def(
+      "sort.stable(Tensor self, *, bool? stable, int dim=-1, bool descending=False) -> (Tensor values, "
+      "Tensor indices)");
+
   m.def("fill.Scalar(Tensor self, Scalar value) -> Tensor");
   m.def("fill.Tensor(Tensor self, Tensor value) -> Tensor");
   m.def("fill_.Scalar(Tensor(a!) self, Scalar value) -> Tensor(a!)");
   m.def("fill_.Tensor(Tensor(a!) self, Tensor value) -> Tensor(a!)");
   m.def("softmax(Tensor input, int dim, bool half_to_float=False) -> Tensor");
   m.def("softmax_backward(Tensor grad_output, Tensor output, int dim, ScalarType input_dtype) -> Tensor");
+  m.def(
+      "reshape_and_cache_flash(Tensor key, Tensor value, Tensor(a!) key_cache, Tensor(b!) value_cache, "
+      "Tensor slot_mapping, str kv_cache_dtype, Tensor? k_scale=None, Tensor? v_scale=None) -> "
+      "()");
+  m.def(
+      "flash_attn_varlen_func(Tensor q, Tensor k, Tensor v, SymInt max_seqlen_q, Tensor cu_seqlens_q, SymInt "
+      "max_seqlen_k, "
+      "Tensor? cu_seqlens_k=None, Tensor? seqused_k=None, Tensor? q_v=None, float dropout_p=0.0, float? "
+      "softmax_scale=None, "
+      "bool causal=False, SymInt[]? window_size=None,float softcap=0.0, "
+      "Tensor? alibi_slopes=None, "
+      "bool deterministic=False, bool return_attn_probs=False, Tensor? block_table=None, bool "
+      "return_softmax_lse=False, "
+      "Tensor? out=None, Tensor? scheduler_metadata=None, Tensor? q_descale=None, Tensor? k_descale=None, "
+      "Tensor? v_descale=None, "
+      "SymInt fa_version=2) -> (Tensor, Tensor)");
+  m.def("rwkv_mm_sparsity(Tensor k, Tensor v) -> Tensor");
+  m.def("rwkv_ka_fusion(Tensor k, Tensor kk, Tensor a, Tensor ka, int H, int N) -> (Tensor, Tensor, Tensor)");
 }
 
 TORCH_LIBRARY_IMPL(flag_gems, CUDA, m) {
@@ -96,11 +122,19 @@ TORCH_LIBRARY_IMPL(flag_gems, CUDA, m) {
   m.impl("embedding", TORCH_FN(embedding));
   m.impl("embedding_backward", TORCH_FN(embedding_backward));
   m.impl("argmax", TORCH_FN(argmax));
+  // sort
+  m.impl("sort", TORCH_FN(sort));
+  m.impl("sort.stable", TORCH_FN(sort_stable));
+
   m.impl("fill.Scalar", TORCH_FN(fill_scalar));
   m.impl("fill.Tensor", TORCH_FN(fill_tensor));
   m.impl("fill_.Scalar", TORCH_FN(fill_scalar_));
   m.impl("fill_.Tensor", TORCH_FN(fill_tensor_));
   m.impl("softmax", TORCH_FN(softmax));
   m.impl("softmax_backward", TORCH_FN(softmax_backward));
+  m.impl("reshape_and_cache_flash", TORCH_FN(reshape_and_cache_flash));
+  m.impl("flash_attn_varlen_func", TORCH_FN(flash_attn_varlen_func));
+  m.impl("rwkv_mm_sparsity", TORCH_FN(rwkv_mm_sparsity));
+  m.impl("rwkv_ka_fusion", TORCH_FN(rwkv_ka_fusion));
 }
 }  // namespace flag_gems

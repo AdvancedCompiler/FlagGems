@@ -1,5 +1,6 @@
 add_library(operators
             SHARED
+            device_info.cpp
             zeros.cpp
             utils.cpp
             add.cpp
@@ -19,8 +20,14 @@ add_library(operators
             embedding.cpp
             argmax.cpp
             softmax.cpp
+            sort.cpp
 	          exponential_.cpp
-            fill.cpp)
+            fill.cpp
+            reshape_and_cache_flash.cpp
+            flash_attn_varlen_func.cpp
+            rwkv_mm_sparsity.cpp
+            rwkv_ka_fusion.cpp)
+
 target_include_directories(operators
   PUBLIC
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>

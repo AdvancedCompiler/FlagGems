@@ -14,6 +14,7 @@ from .accuracy_utils import (
     ARANGE_START,
     BOOL_TYPES,
     FLOAT_DTYPES,
+    FP8_QUANT_SHAPES,
     INT_DTYPES,
     KRON_SHAPES,
     SPECIAL_SHAPES,
@@ -24,6 +25,7 @@ from .accuracy_utils import (
     UT_SHAPES_2D,
     gems_assert_close,
     gems_assert_equal,
+    to_cpu,
     to_reference,
 )
 from .conftest import TO_CPU
@@ -293,7 +295,10 @@ def test_embedding_backward(
 @pytest.mark.parametrize("shape", SPECIAL_SHAPES)
 @pytest.mark.parametrize("dtype", [torch.cfloat])
 def test_accuracy_resolve_neg(shape, dtype):
-    x = torch.randn(size=shape, dtype=dtype, device=flag_gems.device)
+    if flag_gems.vendor_name == "ascend":
+        x = torch.randn(size=shape, dtype=dtype).to(device=flag_gems.device)
+    else:
+        x = torch.randn(size=shape, dtype=dtype, device=flag_gems.device)
     y = x.conj()
     z = y.imag
     assert z.is_neg()
@@ -354,7 +359,6 @@ def test_accuracy_resolve_conj(shape, dtype):
     assert not z.is_conj()
 
 
-@pytest.mark.skipif(flag_gems.device == "musa", reason="AssertionError")
 @pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="AssertionError")
 @pytest.mark.unique
 @pytest.mark.parametrize("shape", SPECIAL_SHAPES)
@@ -532,7 +536,7 @@ def test_pad(shape, dtype, pad_mode, contiguous):
 
 
 @pytest.mark.skipif(flag_gems.vendor_name == "cambricon", reason="fix")
-@pytest.mark.upsample
+@pytest.mark.upsample_bicubic2d_aa
 @pytest.mark.parametrize("align_corners", [False, True])
 @pytest.mark.parametrize("scale", [(2, 2), (2.1, 3.7), (1.3, 5.1), (0.3, 0.7)])
 @pytest.mark.parametrize(
@@ -570,7 +574,7 @@ def test_upsample_bicubic2d_aa(dtype, shape, scale, align_corners):
     gems_assert_close(res_out, ref_out, dtype, reduce_dim=reduce_dim)
 
 
-@pytest.mark.upsample
+@pytest.mark.upsample_nearest2d
 @pytest.mark.parametrize("scale", [(2, 2), (2.1, 3.7), (1.3, 5.1), (0.3, 0.5)])
 @pytest.mark.parametrize("shape", UPSAMPLE_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
@@ -643,7 +647,51 @@ def test_linspace(start, end, steps, dtype, device, pin_memory):
         gems_assert_equal(res_out, ref_out)
 
 
-@pytest.mark.skipif(flag_gems.device == "musa", reason="AssertionError")
+@pytest.mark.logspace
+@pytest.mark.parametrize("start", [0, 2, 4])
+@pytest.mark.parametrize("end", [32, 40])
+@pytest.mark.parametrize("steps", [0, 1, 8, 17])
+@pytest.mark.parametrize("base", [1.2])
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES + ALL_INT_DTYPES + [None])
+@pytest.mark.parametrize("device", [device])
+@pytest.mark.parametrize("pin_memory", [False])
+def test_logspace(start, end, steps, base, dtype, device, pin_memory):
+    if (
+        flag_gems.vendor_name == "kunlunxin"
+        and dtype is torch.half
+        and torch.__version__ < "2.5"
+    ):
+        pytest.skip("wait lerp cpu half impl")
+
+    ref_out = torch.logspace(
+        start,
+        end,
+        steps,
+        base,
+        dtype=dtype,
+        layout=None,
+        device="cpu",
+        pin_memory=pin_memory,
+    ).to(
+        "cpu" if TO_CPU else device
+    )  # compute on cpu and move back to device
+    with flag_gems.use_gems():
+        res_out = torch.logspace(
+            start,
+            end,
+            steps,
+            base,
+            dtype=dtype,
+            layout=None,
+            device=device,
+            pin_memory=pin_memory,
+        )
+    if dtype in [torch.float16, torch.bfloat16, torch.float32, None]:
+        gems_assert_close(res_out, ref_out, dtype=dtype)
+    else:
+        gems_assert_equal(res_out, ref_out)
+
+
 @pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RESULT TODOFIX")
 @pytest.mark.isin
 @pytest.mark.parametrize("shape", SPECIAL_SHAPES)
@@ -1092,13 +1140,16 @@ def get_diagonal_backward_shape_and_dims():
     return result
 
 
-@pytest.mark.skipif(flag_gems.device == "mthreads", reason="tmp skip")
 @pytest.mark.skipif(flag_gems.device == "kunlunxin", reason="tmp skip")
 @pytest.mark.diagonal
 @pytest.mark.parametrize("shape, dim1, dim2", get_diagonal_backward_shape_and_dims())
 @pytest.mark.parametrize("offset", [-1, 0, 1])
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_accuracy_diagonal_backward(shape, dtype, dim1, dim2, offset):
+    if flag_gems.vendor_name == "mthreads":
+        torch.manual_seed(123)
+        torch.musa.manual_seed_all(123)
+
     torch.empty(1, device=flag_gems.device, requires_grad=True).backward()
     inp = torch.randn(shape, dtype=dtype, device=flag_gems.device, requires_grad=True)
     ref_inp = to_reference(inp)
@@ -1117,9 +1168,7 @@ def test_accuracy_diagonal_backward(shape, dtype, dim1, dim2, offset):
     gems_assert_equal(res_in_grad, ref_in_grad)
 
 
-@pytest.mark.skipif(flag_gems.device == "musa", reason="RuntimeError")
 @pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RESULT TODOFIX")
-@pytest.mark.skipif(flag_gems.vendor_name == "kunlunxin", reason="RESULT TODOFIX")
 @pytest.mark.sort
 @pytest.mark.parametrize("batch_size", [4, 8])
 @pytest.mark.parametrize(
@@ -1156,7 +1205,6 @@ def test_sort(batch_size, hiddensize, descending, dtype, dim):
     gems_assert_equal(res_index, ref_index)
 
 
-@pytest.mark.skipif(flag_gems.device == "musa", reason="ZeroDivisionError")
 @pytest.mark.kron
 @pytest.mark.parametrize("shape", KRON_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES + INT_DTYPES + BOOL_TYPES)
@@ -1190,7 +1238,6 @@ def test_accuracy_kron(shape, dtype):
     gems_assert_equal(res_out, ref_out)
 
 
-@pytest.mark.skipif(flag_gems.device == "musa", reason="temp skip")
 @pytest.mark.contiguous
 @pytest.mark.parametrize("shape", SPECIAL_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES + ALL_INT_DTYPES)
@@ -1216,3 +1263,129 @@ def test_accuracy_contiguous(shape, dtype):
     assert res_out.is_contiguous() is True
     assert res_out.stride() == ref_out.stride()
     gems_assert_equal(res_out, ref_out)
+
+
+def native_per_token_group_quant_fp8(x, group_size, eps=1e-10, dtype=None):
+    if dtype is None:
+        dtype = flag_gems.SUPPORTED_FP8_DTYPE
+
+    assert (
+        x.shape[-1] % group_size == 0
+    ), "the last dimension of `x` cannot be divisible by `group_size`"
+    assert x.is_contiguous(), "`x` is not contiguous"
+
+    finfo = torch.finfo(dtype)
+    fp8_min = finfo.min
+    fp8_max = finfo.max
+
+    x_ = x.reshape(x.numel() // group_size, group_size)
+    amax = x_.abs().max(dim=-1, keepdim=True)[0].clamp(min=eps).to(torch.float32)
+    x_s = amax / fp8_max
+    x_q = (x_ / x_s).clamp(min=fp8_min, max=fp8_max).to(dtype)
+    x_q = x_q.reshape(x.shape)
+    x_s = x_s.reshape(x.shape[:-1] + (x.shape[-1] // group_size,))
+
+    return x_q, x_s
+
+
+@pytest.mark.per_token_group_quant_fp8
+@pytest.mark.parametrize("seed", FP8_QUANT_SHAPES["SEEDS"])
+@pytest.mark.parametrize("group_size", FP8_QUANT_SHAPES["GROUP_SIZE"])
+@pytest.mark.parametrize("dtype", FP8_QUANT_SHAPES["DTYPES"])
+@pytest.mark.parametrize("d", FP8_QUANT_SHAPES["D"])
+@pytest.mark.parametrize("num_tokens", FP8_QUANT_SHAPES["NUM_TOKENS"])
+def test_accuracy_per_token_group_quant_fp8(num_tokens, d, dtype, group_size, seed):
+    torch.manual_seed(seed)
+    x = torch.rand(num_tokens, d, dtype=dtype, device=flag_gems.device)
+    ref_x = to_reference(x)
+
+    ref_out, ref_scale = native_per_token_group_quant_fp8(ref_x, group_size)
+    with flag_gems.use_gems():
+        out, scale = flag_gems.per_token_group_quant_fp8(x, group_size)
+
+    gems_assert_close(scale, ref_scale, dtype=torch.float32)
+
+    out_fp32 = to_cpu(out, ref_out).to(torch.float32)
+    ref_out_fp32 = ref_out.to(torch.float32)
+    assert torch.allclose(out_fp32, ref_out_fp32, rtol=0.15)
+
+
+@pytest.mark.rwkv_ka_fusion
+@pytest.mark.parametrize("T", [2**d for d in range(4, 15, 2)])
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_rwkv_kafusion(T, dtype):
+    H = 8
+    N = 64
+    C = H * N
+    k = torch.rand(T, C, dtype=dtype, device=flag_gems.device)
+    kk = torch.rand(C, dtype=dtype, device=flag_gems.device)
+    a = torch.rand(T, C, dtype=dtype, device=flag_gems.device)
+    ka = torch.rand(C, dtype=dtype, device=flag_gems.device)
+
+    with flag_gems.use_gems():
+        o_k, o_kk, o_kka = flag_gems.rwkv_ka_fusion(k, kk, a, ka, H, N)
+
+    ref_k = to_reference(k, True)
+    ref_kk = to_reference(kk, True)
+    ref_a = to_reference(a, True)
+    ref_ka = to_reference(ka, True)
+
+    ref_o_kk = torch.nn.functional.normalize(
+        (ref_k * ref_kk).view(T, H, N), dim=-1, p=2.0
+    ).view(T, H * N)
+    ref_o_k = ref_k * (1 + (ref_a - 1) * ref_ka)
+    ref_o_kka = ref_o_kk * ref_a
+
+    gems_assert_close(o_k, ref_o_k, dtype, equal_nan=True)
+    gems_assert_close(o_kk, ref_o_kk, dtype, equal_nan=True)
+    gems_assert_close(o_kka, ref_o_kka, dtype, equal_nan=True)
+
+
+@pytest.mark.rwkv_mm_sparsity
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_rwkv_mmsparsity(dtype):
+    n = 16384
+    embedding_dim = 4096
+
+    k = torch.randn(n, dtype=dtype, device=flag_gems.device)
+    k = torch.relu(k)
+    if flag_gems.vendor_name == "kunlunxin":
+        torch.manual_seed(42)
+        # kunlunxin sparsity test require 90% sparsity
+        sparsity_levels = [0.9]
+        for target_sparsity in sparsity_levels:
+            threshold = torch.quantile(k.abs().to(torch.float32), target_sparsity).to(
+                dtype
+            )
+            k = torch.relu(k - threshold)
+
+    V_ = torch.randn(n, embedding_dim, dtype=dtype, device=flag_gems.device)
+
+    with flag_gems.use_gems():
+        res = flag_gems.rwkv_mm_sparsity(k, V_)
+
+    ref_k = to_reference(k, True)
+    ref_V_ = to_reference(V_, True)
+    ref_res = ref_k @ ref_V_
+
+    gems_assert_close(res, ref_res, dtype, equal_nan=True)
+
+
+M_VALUES = [1, 33, 64, 222]
+TOP_KS = [2, 6]
+K_VALUES = [128, 511, 1024]
+MOE_SHAPES = list(itertools.product(M_VALUES, TOP_KS, K_VALUES))
+
+
+@pytest.mark.moe_sum
+@pytest.mark.parametrize("shape", MOE_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_moe_sum(shape, dtype):
+    m, topk, k = shape
+    inp1 = torch.randn((m, topk, k), dtype=dtype, device=flag_gems.device)
+    res_out = torch.empty((m, k), dtype=dtype, device=flag_gems.device)
+    ref_inp1 = to_reference(inp1)
+    ref_out = torch.sum(ref_inp1, dim=1)
+    with flag_gems.use_gems():
+        flag_gems.moe_sum(inp1, res_out)
+    gems_assert_close(res_out, ref_out, dtype)

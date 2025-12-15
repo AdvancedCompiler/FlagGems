@@ -11,9 +11,10 @@ from flag_gems.utils import libentry, libtuner
 
 from ..utils import MAX_GRID_SIZE_Y, TOTAL_CORE_NUM
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("flag_gems").getChild(__name__.lstrip("."))
 device = device.name
 
+# FIXME(cambricon): double 8192 when JIRA:1488 is fixed
 MAX_C_MLU_CUMSUM = 8192
 MAX_C_MLU_SPILT_CUMSUM = 32768
 MAX_TILE_N = 256
@@ -56,7 +57,8 @@ def cumsum_blelloch_impl(
     # Deal the last tile row exclusive sum(Composed by right shift and tl.cumsum)
     # Right shift 1 position for the last tile row
     partial_sum = tl.zeros((BLOCK_M, TILE_NUM, BLOCK_K), dtype=tl.dtype(DTYPE))
-    partial_sum[:, 1:, :] = x_block[:, TILE_N - 1, 0 : (TILE_NUM - 1), :]
+    if TILE_NUM > 1:
+        partial_sum[:, 1:, :] = x_block[:, TILE_N - 1, 0 : (TILE_NUM - 1), :]
     partial_sum = tl.cumsum(partial_sum, axis=1)
     # Apply cycle add for all tile data
     x_block += partial_sum[:, None, :, :]
@@ -409,8 +411,7 @@ def cumsum_kernel_result(
     tl.store(y_ptrs, x_block, mask=mask)
 
 
-def cumsum(inp, dim=1, *, dtype=None):
-    logger.debug("GEMS_CAMBRICON CUMSUM")
+def cumsum_wrapper(inp, dim=1, dtype=None, out=None):
     assert dim >= -inp.ndim and dim < inp.ndim, "Invalid dim"
     shape = inp.shape
     dim = dim % inp.ndim
@@ -425,7 +426,9 @@ def cumsum(inp, dim=1, *, dtype=None):
         dtype = inp.dtype
         if dtype is torch.bool:
             dtype = torch.int32
-    out = torch.empty_like(inp, dtype=dtype)
+    if out is None:
+        out = torch.empty_like(inp, dtype=dtype)
+
     blelloch_grid = lambda meta: (
         triton.cdiv(M, meta["BLOCK_M"]),
         K,
@@ -461,6 +464,16 @@ def cumsum(inp, dim=1, *, dtype=None):
         with torch_device_fn.device(inp.device):
             cumsum_blelloch[blelloch_grid](inp, out, M, N, K, dtypestr)
     return out
+
+
+def cumsum(inp, dim=1, *, dtype=None):
+    logger.debug("GEMS_CAMBRICON CUMSUM")
+    return cumsum_wrapper(inp, dim, dtype)
+
+
+def cumsum_out(inp, dim=1, *, dtype=None, out):
+    logger.debug("GEMS_CAMBRICON CUMSUM_OUT")
+    return cumsum_wrapper(inp, dim, dtype, out)
 
 
 @libentry()

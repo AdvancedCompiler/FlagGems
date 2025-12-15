@@ -1,7 +1,5 @@
 [中文版](./README_cn.md)
 
-![img_v3_02gp_8115f603-cc89-4e96-ae9d-f01b4fef796g](https://github.com/user-attachments/assets/97950fc6-62bb-4b6a-b8d5-5751c14492fa)
-
 ## Introduction
 
 FlagGems is a high-performance general operator library implemented in [OpenAI Triton](https://github.com/openai/triton). It builds on a collection of backend neutral kernels that aims to accelerate LLM training and inference across diverse hardware platforms.
@@ -11,7 +9,7 @@ By registering with the ATen backend of PyTorch, FlagGems facilitates a seamless
 We created WeChat group for FlagGems. Scan the QR code to join the group chat! To get the first hand message about our updates and new release, or having any questions or ideas, join us now!
 
 <p align="center">
- <img src="https://github.com/user-attachments/assets/69019a23-0550-44b1-ac42-e73f06cb55d6" alt="bge_wechat_group" class="center" width="200">
+<img width="204" height="180" alt="开源小助手" src="https://github.com/user-attachments/assets/da42799f-c7f7-43f0-91c3-f4935b24e968" />
 </p>
 
 ## Features
@@ -50,6 +48,24 @@ FlagGems introduces `LibEntry`, which independently manages the kernel cache and
 FlagGems can be installed either as a pure Python package or as a package with C++ extensions. The C++ runtime is designed to address the overhead of the Python runtime and improve end-to-end performance.
 
 ## Changelog
+
+### v4.2 (upcoming)
+
+- release targeting 216 operators, aligned with the updated [Operator List](docs/operator_list.md)
+- additions: `tan`, `tan_`, `baddbmm`, `avg_pool2d`, `clamp_min`, `clamp_min_`, `std`, `trace`, `max_pool2d`, `bitwise_left_shift`, `bitwise_right_shift`
+- the previous `upsample` operator will be split into `upsample_nearest2d` and `upsample_bicubic2d_aa`
+
+### v4.1
+
+- dedicated RWKV-focused release with 204 supported operators
+- includes fused kernels `rwkv_mm_sparsity` and `rwkv_ka_fusion` optimized for RWKV inference acceleration scenarios
+- adopted by the RWKV project in [BlinkDL/Albatross:faster_251101](https://github.com/BlinkDL/Albatross/tree/main/faster_251101)
+
+### v4.0
+
+- support 202 operators in total
+- newly added operators: `addcdiv`, `addcmul`, `addmv`, `addr`, `atan`, `atan_`, `celu`, `celu_`, `elu_`, `exp2`, `exp2_`, `get_scheduler_metadata`, `index_add_`, `logspace`, `moe_align_block_size`, `softplus`, `sqrt_`, `topk_softmax`
+- Triton JIT C++ runtime now ships precompiled kernels for: `add`, `addmm`, `argmax`, `bmm`, `cat`, `contiguous`, `embedding`, `exponential_`, `fill`, `flash_attn_varlen_func`, `fused_add_rms_norm`, `max`, `mm`, `nonzero`, `reshape_and_cache_flash`, `rms_norm`, `rotary_embedding`, `softmax`, `sum`, `topk`, `zeros`
 
 ### v3.0
 
@@ -134,7 +150,7 @@ If you find our work useful, please consider citing our project:
 
 ## Contact us
 
-If you have any questions about our project, please submit an issue, or contact us through <a href="mailto:flaggems@baai.ac.cn">flaggems@baai.ac.cn</a>.
+If you have any questions about our project, please submit an issue, or contact us through <a href="mailto:contact@flagos.io">contact@flagos.io</a>.
 
 ## License
 

@@ -351,7 +351,10 @@ def test_hash_changes_when_dependency_modified():
     )
 
 
-@pytest.mark.skipif(flag_gems.device == "musa", reason="AssertionError")
+@pytest.mark.skipif(
+    flag_gems.vendor_name == "mthreads",
+    reason=" Cannot re-initialize MUSA in forked subprocess",
+)
 def test_libcache_vllm_signal_scenario():
     import multiprocessing
     import signal
@@ -407,14 +410,22 @@ def test_libcache_vllm_signal_scenario():
         except sqlite3.OperationalError:
             pass
 
-    assert cache_saved, f"Test documented current behavior: cache_saved={cache_saved}"
+    if flag_gems.vendor_name != "cambricon":
+        # TODO: (cambricon) Sqlite DO NOT approve that data can be written into
+        # db file correctly, expecially in multiprocessing circumstances.
+        assert (
+            cache_saved
+        ), f"Test documented current behavior: cache_saved={cache_saved}"
 
     if process.is_alive():
         os.kill(process.pid, signal.SIGKILL)
         process.join()
 
 
-@pytest.mark.skipif(flag_gems.device == "musa", reason="AssertionError")
+@pytest.mark.skipif(
+    flag_gems.vendor_name == "mthreads",
+    reason=" Cannot re-initialize MUSA in forked subprocess",
+)
 def test_libcache_concurrent_write_on_signal():
     """
     Tests that LibCache can handle concurrent writes from multiple processes
