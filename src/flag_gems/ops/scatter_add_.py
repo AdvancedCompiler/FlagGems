@@ -265,7 +265,7 @@ class ScatterFunction:
                 code,
             )
 
-            file_name = f"scatter_rank_{key}_pid_{self.pid}.py"
+            file_name = f"scatter_add_rank_{key}_pid_{self.pid}.py"
 
             with open(code_cache_dir() / file_name, "wt", encoding="utf-8") as f:
                 f.write(code.getvalue())
