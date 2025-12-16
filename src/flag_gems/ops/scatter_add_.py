@@ -260,7 +260,7 @@ class ScatterFunction:
             code = IndentedBuffer()
             code = generate_code(
                 args,
-                "_scatter_wrapper",
+                "_scatter_add_wrapper",
                 "_scatter_add_jit_function",
                 code,
             )
