@@ -278,7 +278,7 @@ class ScatterFunction:
 
             m = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(m)
-            overload = getattr(m, "_scatter_wrapper")
+            overload = getattr(m, "_scatter_add_wrapper")
             self.overloads[key] = overload
 
         return overload(*args, **kwargs)
