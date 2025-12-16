@@ -212,18 +212,22 @@ class TopKSoftmaxBenchmark(Benchmark):
             num_tokens, num_experts, device=device, dtype=torch.float32
         )
 
-        topk_weights = torch.empty(num_tokens, k, device=device, dtype=torch.float32)
-        topk_indices = torch.empty(num_tokens, k, device=device, dtype=torch.int32)
-        token_expert_indices = torch.empty(
-            num_tokens, k, device=device, dtype=torch.int32
-        )
+        for renormalize in (False, True):
+            topk_weights = torch.empty(
+                num_tokens, k, device=device, dtype=torch.float32
+            )
+            topk_indices = torch.empty(num_tokens, k, device=device, dtype=torch.int32)
+            token_expert_indices = torch.empty(
+                num_tokens, k, device=device, dtype=torch.int32
+            )
 
-        yield (
-            topk_weights,
-            topk_indices,
-            token_expert_indices,
-            gating_output,
-        )
+            yield (
+                topk_weights,
+                topk_indices,
+                token_expert_indices,
+                gating_output,
+                renormalize,
+            )
 
 
 @pytest.mark.skipif(

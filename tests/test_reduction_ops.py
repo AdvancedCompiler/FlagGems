@@ -1815,11 +1815,15 @@ def test_accuracy_mse_loss(shape, dtype, reduction):
     gems_assert_close(res_out, ref_out, dtype, equal_nan=True, reduce_dim=shape[dim])
 
 
-def topk_softmax_torch_reference(gating_output: torch.Tensor, topk: int):
+def topk_softmax_torch_reference(
+    gating_output: torch.Tensor, topk: int, renormalize: bool
+):
     probs = torch.softmax(gating_output, dim=-1)
     topk_values, topk_indices = torch.topk(
         probs, k=topk, dim=-1, largest=True, sorted=True
     )
+    if renormalize:
+        topk_values = topk_values / (topk_values.sum(dim=-1, keepdim=True) + 1e-8)
     num_tokens = gating_output.shape[0]
     source_rows = torch.arange(topk, device=gating_output.device).view(
         1, -1
@@ -1850,7 +1854,8 @@ def generate_test_params():
         (1024, 512, 32),
     ],
 )
-def test_topk_softmax(num_tokens, num_experts, topk, index_dtype):
+@pytest.mark.parametrize("renormalize", [False, True])
+def test_topk_softmax(num_tokens, num_experts, topk, index_dtype, renormalize):
     if flag_gems.vendor_name == "mthreads" and index_dtype == torch.uint32:
         # torch musa unsupport uint32
         index_dtype = torch.int64
@@ -1868,10 +1873,12 @@ def test_topk_softmax(num_tokens, num_experts, topk, index_dtype):
         (num_tokens, topk), device=device, dtype=torch.int32
     )
 
-    topk_softmax(topk_weights, topk_indices, token_expert_indices, gating_output)
+    topk_softmax(
+        topk_weights, topk_indices, token_expert_indices, gating_output, renormalize
+    )
 
     ref_weights, ref_indices, ref_source_rows = topk_softmax_torch_reference(
-        gating_output, topk
+        gating_output, topk, renormalize
     )
 
     assert topk_weights.shape == (num_tokens, topk)
@@ -1881,6 +1888,10 @@ def test_topk_softmax(num_tokens, num_experts, topk, index_dtype):
     assert torch.allclose(topk_weights, ref_weights, atol=1e-5)
     assert torch.equal(topk_indices.cpu(), ref_indices.to(index_dtype).cpu())
     assert torch.equal(token_expert_indices.cpu(), ref_source_rows.cpu())
+
+    if renormalize:
+        sums = topk_weights.sum(dim=-1)
+        assert torch.allclose(sums, torch.ones_like(sums), atol=1e-5)
 
 
 @pytest.mark.std
