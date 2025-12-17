@@ -78,4 +78,4 @@ def apply_repetition_penalties(logits, prompt_mask, output_mask, repetition_pena
         vocab_size,
         BLOCK_SIZE=BLOCK_SIZE,
     )
-    return logits
+    return None
