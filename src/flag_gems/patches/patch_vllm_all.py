@@ -388,5 +388,9 @@ def apply_gems_patches_to_vllm(verbose=True):
         verbose,
     )
     patch_vllm_lib(
-        "_C", "repetition_penalties", custom_apply_repetition_penalties, "CUDA", verbose
+        "_C",
+        "apply_repetition_penalties_",
+        custom_apply_repetition_penalties,
+        "CUDA",
+        verbose,
     )
