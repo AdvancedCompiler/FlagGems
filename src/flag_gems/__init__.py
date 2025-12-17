@@ -70,7 +70,6 @@ def enable(
             ("any", any),
             ("any.dim", any_dim),
             ("any.dims", any_dims),
-            ("apply_repetition_penalties", apply_repetition_penalties),
             ("arange", arange),
             ("arange.start", arange_start),
             ("arange.start_step", arange_start),
