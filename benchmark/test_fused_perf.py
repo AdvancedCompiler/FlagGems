@@ -208,9 +208,7 @@ class TopKSoftmaxBenchmark(Benchmark):
         """
         num_tokens, num_experts, k = config
 
-        gating_output = torch.randn(
-            num_tokens, num_experts, device=device, dtype=torch.float32
-        )
+        gating_output = torch.randn(num_tokens, num_experts, device=device, dtype=dtype)
 
         for renormalize in (False, True):
             topk_weights = torch.empty(
@@ -254,7 +252,7 @@ def test_perf_topk_softmax():
     bench = TopKSoftmaxBenchmark(
         op_name="topk_softmax",
         torch_op=vllm_topk_softmax,
-        dtypes=[torch.float32],
+        dtypes=[torch.float32, torch.float16, torch.bfloat16],
     )
 
     bench.set_gems(fused.topk_softmax)

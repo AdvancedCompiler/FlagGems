@@ -31,7 +31,7 @@ def topk_gating_softmax_kernel(
         input_ptr + rows[:, None] * num_experts + cols[None, :],
         mask=valid_rows[:, None] & valid_cols[None, :],
         other=-float("inf"),
-    )
+    ).to(tl.float32)
 
     row_max = tl.max(logits, axis=1)[:, None]
     exp_vals = tl.exp(logits - row_max)
