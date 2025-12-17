@@ -9,7 +9,6 @@ from flag_gems.ops.all import all, all_dim, all_dims
 from flag_gems.ops.amax import amax
 from flag_gems.ops.angle import angle
 from flag_gems.ops.any import any, any_dim, any_dims
-from flag_gems.ops.apply_repetition_penalties import apply_repetition_penalties
 from flag_gems.ops.arange import arange, arange_start
 from flag_gems.ops.argmax import argmax
 from flag_gems.ops.argmin import argmin
@@ -254,7 +253,6 @@ __all__ = [
     "any",
     "any_dim",
     "any_dims",
-    "apply_repetition_penalties",
     "arange",
     "arange_start",
     "argmax",
