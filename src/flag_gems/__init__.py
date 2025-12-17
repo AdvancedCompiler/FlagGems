@@ -104,6 +104,7 @@ def enable(
             ("clamp_", clamp_),
             ("clamp_.Tensor", clamp_tensor_),
             ("clamp_min_", clamp_min_),
+            ("count_and_sort_expert_tokens", count_and_sort_expert_tokens),
             ("constant_pad_nd", constant_pad_nd),
             # ("contiguous", contiguous),
             (

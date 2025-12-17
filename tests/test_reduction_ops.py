@@ -1986,3 +1986,47 @@ def test_accuracy_scaled_softmax_backward(
     gems_assert_close(
         in_grad, in_grad_ref, dtype, equal_nan=True, reduce_dim=s.shape[-1]
     )
+
+
+def count_and_sort_expert_tokens_torch_reference(
+    topk_ids: torch.Tensor, num_experts: int
+):
+    ids_flat = topk_ids.flatten()
+    expert_ids_sorted, sorted_indices = torch.sort(ids_flat)
+    return sorted_indices.int(), expert_ids_sorted.int()
+
+
+@pytest.mark.count_and_sort_expert_tokens
+@pytest.mark.parametrize("num_tokens", [128, 4096])
+@pytest.mark.parametrize("num_experts", [8, 64])
+@pytest.mark.parametrize("topk", [2, 5])
+@pytest.mark.parametrize("dtype", [torch.int32])  # Input IDs are usually int32
+def test_count_and_sort_expert_tokens(num_tokens, num_experts, topk, dtype):
+    topk_ids = torch.randint(
+        0, num_experts, (num_tokens, topk), device=flag_gems.device, dtype=dtype
+    )
+
+    ref_sorted_ids, ref_expert_ids = count_and_sort_expert_tokens_torch_reference(
+        topk_ids, num_experts
+    )
+
+    with flag_gems.use_gems():
+        res_sorted_ids, res_expert_ids = flag_gems.count_and_sort_expert_tokens(
+            topk_ids, num_experts
+        )
+
+    gems_assert_equal(res_expert_ids, ref_expert_ids)
+
+    for i in range(num_experts):
+        mask = ref_expert_ids == i
+
+        if not mask.any():
+            continue
+
+        ref_bucket = ref_sorted_ids[mask]
+        res_bucket = res_sorted_ids[mask]
+
+        ref_bucket_sorted, _ = torch.sort(ref_bucket)
+        res_bucket_sorted, _ = torch.sort(res_bucket)
+
+        gems_assert_equal(res_bucket_sorted, ref_bucket_sorted)

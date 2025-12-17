@@ -1,4 +1,5 @@
 from flag_gems.fused.concat_and_cache_mla import concat_and_cache_mla
+from flag_gems.fused.count_and_sort_expert_tokens import count_and_sort_expert_tokens
 from flag_gems.fused.cross_entropy_loss import cross_entropy_loss
 from flag_gems.fused.flash_mla import flash_mla
 from flag_gems.fused.fused_add_rms_norm import fused_add_rms_norm
@@ -32,6 +33,7 @@ __all__ = [
     "dgeglu",
     "gelu_and_mul",
     "cross_entropy_loss",
+    "count_and_sort_expert_tokens",
     "outer",
     "instance_norm",
     "weight_norm",

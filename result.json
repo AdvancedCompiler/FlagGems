@@ -1,0 +1,98 @@
+{
+    "tests/test_reduction_ops.py::test_count_and_sort_expert_tokens[dtype0-2-8-128]": {
+        "params": {
+            "dtype": "torch.int32",
+            "topk": 2,
+            "num_experts": 8,
+            "num_tokens": 128
+        },
+        "result": "passed",
+        "opname": [
+            "count_and_sort_expert_tokens"
+        ]
+    },
+    "tests/test_reduction_ops.py::test_count_and_sort_expert_tokens[dtype0-2-8-4096]": {
+        "params": {
+            "dtype": "torch.int32",
+            "topk": 2,
+            "num_experts": 8,
+            "num_tokens": 4096
+        },
+        "result": "passed",
+        "opname": [
+            "count_and_sort_expert_tokens"
+        ]
+    },
+    "tests/test_reduction_ops.py::test_count_and_sort_expert_tokens[dtype0-2-64-128]": {
+        "params": {
+            "dtype": "torch.int32",
+            "topk": 2,
+            "num_experts": 64,
+            "num_tokens": 128
+        },
+        "result": "passed",
+        "opname": [
+            "count_and_sort_expert_tokens"
+        ]
+    },
+    "tests/test_reduction_ops.py::test_count_and_sort_expert_tokens[dtype0-2-64-4096]": {
+        "params": {
+            "dtype": "torch.int32",
+            "topk": 2,
+            "num_experts": 64,
+            "num_tokens": 4096
+        },
+        "result": "passed",
+        "opname": [
+            "count_and_sort_expert_tokens"
+        ]
+    },
+    "tests/test_reduction_ops.py::test_count_and_sort_expert_tokens[dtype0-5-8-128]": {
+        "params": {
+            "dtype": "torch.int32",
+            "topk": 5,
+            "num_experts": 8,
+            "num_tokens": 128
+        },
+        "result": "passed",
+        "opname": [
+            "count_and_sort_expert_tokens"
+        ]
+    },
+    "tests/test_reduction_ops.py::test_count_and_sort_expert_tokens[dtype0-5-8-4096]": {
+        "params": {
+            "dtype": "torch.int32",
+            "topk": 5,
+            "num_experts": 8,
+            "num_tokens": 4096
+        },
+        "result": "passed",
+        "opname": [
+            "count_and_sort_expert_tokens"
+        ]
+    },
+    "tests/test_reduction_ops.py::test_count_and_sort_expert_tokens[dtype0-5-64-128]": {
+        "params": {
+            "dtype": "torch.int32",
+            "topk": 5,
+            "num_experts": 64,
+            "num_tokens": 128
+        },
+        "result": "passed",
+        "opname": [
+            "count_and_sort_expert_tokens"
+        ]
+    },
+    "tests/test_reduction_ops.py::test_count_and_sort_expert_tokens[dtype0-5-64-4096]": {
+        "params": {
+            "dtype": "torch.int32",
+            "topk": 5,
+            "num_experts": 64,
+            "num_tokens": 4096
+        },
+        "result": "passed",
+        "opname": [
+            "count_and_sort_expert_tokens"
+        ]
+    }
+}
