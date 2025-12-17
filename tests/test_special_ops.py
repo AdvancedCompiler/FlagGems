@@ -1004,7 +1004,7 @@ def test_accuracy_repeat_interleave_self_int(shape, dim, dtype):
 
     ref_out = torch.repeat_interleave(ref_inp, repeats, dim)
     with flag_gems.use_gems():
-        res_out = torch.repeat_interleave(ref_inp, repeats, dim)
+        res_out = torch.repeat_interleave(inp, repeats, dim)
     gems_assert_equal(res_out, ref_out)
 
 
@@ -1019,7 +1019,7 @@ def test_accuracy_repeat_interleave_self_int_non_contiguous(shape, dim, dtype):
 
     ref_out = torch.repeat_interleave(ref_inp, repeats, dim)
     with flag_gems.use_gems():
-        res_out = torch.repeat_interleave(ref_inp, repeats, dim)
+        res_out = torch.repeat_interleave(inp, repeats, dim)
     gems_assert_equal(res_out, ref_out)
 
 
@@ -1350,6 +1350,7 @@ def test_accuracy_rwkv_mmsparsity(dtype):
     k = torch.randn(n, dtype=dtype, device=flag_gems.device)
     k = torch.relu(k)
     if flag_gems.vendor_name == "kunlunxin":
+        torch.manual_seed(42)
         # kunlunxin sparsity test require 90% sparsity
         sparsity_levels = [0.9]
         for target_sparsity in sparsity_levels:
