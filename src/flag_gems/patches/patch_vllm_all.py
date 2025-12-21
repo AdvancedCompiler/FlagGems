@@ -338,6 +338,13 @@ def custom_get_scheduler_metadata(
     )
 
 
+def custom_count_and_sort_expert_tokens(
+    topk_ids: torch.Tensor,
+    num_experts: int,
+):
+    return flag_gems.count_and_sort_expert_tokens(topk_ids, num_experts)
+
+
 def apply_gems_patches_to_vllm(verbose=True):
     import vllm  # noqa: F401
     from vllm.attention.ops.paged_attn import PagedAttention
@@ -372,6 +379,13 @@ def apply_gems_patches_to_vllm(verbose=True):
     patch_vllm_lib(
         "_vllm_fa3_C",
         "get_scheduler_metadata",
+        custom_get_scheduler_metadata,
+        "CUDA",
+        verbose,
+    )
+    patch_vllm_lib(
+        "_C",
+        "count_and_sort_expert_tokens",
         custom_get_scheduler_metadata,
         "CUDA",
         verbose,

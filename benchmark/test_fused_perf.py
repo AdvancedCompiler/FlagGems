@@ -256,3 +256,83 @@ def test_perf_topk_softmax():
     bench.set_gems(fused.topk_softmax)
 
     bench.run()
+
+
+class CountAndSortExpertTokensBenchmark(Benchmark):
+    def __init__(self, op_name, torch_op, dtypes):
+        super().__init__(op_name, torch_op, dtypes)
+        self.gems_op = None
+        self.num_experts = 8
+
+    def set_shapes(self, shape_file_path=None):
+        self.shapes = [
+            (128, self.num_experts),
+            (1024, self.num_experts),
+            (4096, self.num_experts),
+            (16384, self.num_experts),
+            (32768, self.num_experts),
+        ]
+
+    def get_input_iter(self, cur_dtype):
+        for shape in self.shapes:
+            num_tokens, num_experts = shape
+            topk = 2
+
+            topk_ids = torch.randint(
+                0,
+                num_experts,
+                (num_tokens, topk),
+                dtype=torch.int32,
+                device=self.device,
+            )
+
+            yield (topk_ids, num_experts)
+
+    def set_gems(self, gems_op):
+        self.gems_op = gems_op
+
+
+UNSUPPORTED_VENDORS = {
+    "metax",
+    "kunlunxin",
+    "iluvatar",
+    "mthreads",
+    "hygon",
+    "cambricon",
+}
+
+
+@pytest.mark.count_and_sort_expert_tokens
+@pytest.mark.skipif(SkipVersion("vllm", "<0.4"), reason="vLLM <0.4 not supported")
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+@pytest.mark.skipif(
+    flag_gems.vendor_name in UNSUPPORTED_VENDORS, reason="Vendor not supported"
+)
+@pytest.mark.performance
+def test_perf_count_and_sort_expert_tokens():
+    vllm_ops = pytest.importorskip("vllm._custom_ops")
+    ref_op = getattr(vllm_ops, "count_and_sort_expert_tokens", None)
+    if ref_op is None:
+
+        def torch_fallback(topk_ids, num_experts):
+            flattened = topk_ids.view(-1)
+            return torch.sort(flattened, stable=True)
+
+        ref_op = torch_fallback
+    gems_op_name = "count_and_sort_expert_tokens"
+    gems_op = getattr(flag_gems, gems_op_name, None)
+
+    if gems_op is None and hasattr(flag_gems, "ops"):
+        gems_op = getattr(flag_gems.ops, gems_op_name, None)
+
+    if gems_op is None:
+        pytest.skip(f"FlagGems 中未找到名为 '{gems_op_name}' 的算子。")
+
+    bench = CountAndSortExpertTokensBenchmark(
+        op_name=gems_op_name,
+        torch_op=ref_op,
+        dtypes=FLOAT_DTYPES,
+    )
+
+    bench.set_gems(gems_op)
+    bench.run()
