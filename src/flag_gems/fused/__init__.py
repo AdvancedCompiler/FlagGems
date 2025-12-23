@@ -1,5 +1,6 @@
 from flag_gems.fused.concat_and_cache_mla import concat_and_cache_mla
 from flag_gems.fused.cross_entropy_loss import cross_entropy_loss
+from flag_gems.fused.cutlass_scaled_mm import cutlass_scaled_mm
 from flag_gems.fused.flash_mla import flash_mla
 from flag_gems.fused.fused_add_rms_norm import fused_add_rms_norm
 from flag_gems.fused.geglu import dgeglu, geglu
@@ -47,4 +48,5 @@ __all__ = [
     "rwkv_mm_sparsity",
     "dreglu",
     "reglu",
+    "cutlass_scaled_mm",
 ]

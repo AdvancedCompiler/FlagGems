@@ -349,3 +349,128 @@ def test_addr_benchmark():
         dtypes=FLOAT_DTYPES,
     )
     bench.run()
+
+
+class CutlassScaledMMTestKit:
+    out_dtypes = [torch.float16, torch.bfloat16]
+
+    atol = 1e0
+    rtol = 1e-1
+
+    def baseline_scaled_mm(
+        a: torch.Tensor,
+        b: torch.Tensor,
+        scale_a: torch.Tensor,
+        scale_b: torch.Tensor,
+        out_dtype: type[torch.dtype],
+        bias: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        def group_broadcast(t, shape):
+            for i, s in enumerate(shape):
+                if t.shape[i] != s and t.shape[i] != 1:
+                    assert s % t.shape[i] == 0
+                    t = (
+                        t.unsqueeze(i + 1)
+                        .expand(*t.shape[: i + 1], s // t.shape[i], *t.shape[i + 1 :])
+                        .flatten(i, i + 1)
+                    )
+            return t
+
+        scale_a = group_broadcast(scale_a, a.shape)
+        scale_b = group_broadcast(scale_b, b.shape)
+
+        output = torch.mm(
+            (scale_a * a.to(dtype=torch.float32)), (scale_b * b.to(dtype=torch.float32))
+        ).to(out_dtype)
+
+        if bias is not None:
+            output = output + bias
+
+        return output
+
+
+class CutlassScaledMMBenchmark(Benchmark):
+    """
+    benchmark for cutlass_scaled_mm
+    """
+
+    TestKit = CutlassScaledMMTestKit
+
+    def __init__(self):
+        out_dtypes = [torch.float16, torch.bfloat16]
+        from vllm._custom_ops import cutlass_scaled_mm
+
+        super().__init__("cutlass_scaled_mm", cutlass_scaled_mm, out_dtypes)
+        self.set_gems(flag_gems.cutlass_scaled_mm)
+
+    def set_more_shapes(self):
+        self.shapes = []
+
+        MNK_FACTORS = [
+            (1, 256, 128),
+            (1, 16384, 1024),
+            (1, 24576, 496),
+            (16, 256, 496),
+            (16, 16384, 128),
+            (16, 24576, 4096),
+            (32, 8192, 4096),
+            (32, 16384, 4096),
+            (33, 1024, 1024),
+            (33, 8192, 128),
+            (64, 2048, 496),
+            (64, 16384, 1024),
+            (100, 8192, 496),
+            (128, 32768, 4096),
+            (256, 4096, 4096),
+            (512, 256, 1024),
+            (512, 8192, 4096),
+            (512, 16384, 128),
+            (512, 24576, 128),
+        ]
+        from random import shuffle
+
+        shuffle(MNK_FACTORS)
+        MNK_FACTORS = MNK_FACTORS[:8]
+        if_use_bias = [True, False]
+
+        extended_shapes = []
+        for shape in MNK_FACTORS:
+            for use_bias in if_use_bias:
+                extended_shapes.append((*shape, use_bias))
+
+        return extended_shapes
+
+    def get_input_iter(self, dtype):
+        for M, N, K, use_bias in self.shapes:
+
+            def to_int8(tensor: torch.Tensor):
+                return torch.round(tensor.clamp(min=-128, max=127)).to(dtype=torch.int8)
+
+            a = to_int8(torch.randn((M, K), device=flag_gems.device) * 5)
+            b = to_int8(torch.randn((N, K), device=flag_gems.device).t() * 5)
+
+            scale_a = torch.randn((M,), device=flag_gems.device)
+            scale_b = torch.randn((N,), device=flag_gems.device)
+
+            bias = None
+            if use_bias:
+                bias = torch.randn((N,), dtype=dtype, device=flag_gems.device)
+
+            yield (a, b, scale_a, scale_b, dtype, bias)
+
+
+def if_vllm_ok():
+    try:
+        import vllm  # noqa: F401
+    except ImportError:
+        return False
+
+    return True
+
+
+@pytest.mark.skipif(not if_vllm_ok(), reason="vllm is not installed")
+@pytest.mark.cutlass_scaled_mm
+@pytest.mark.performance
+def test_cutlass_scaled_mm_benchmark():
+    bench = CutlassScaledMMBenchmark()
+    bench.run()

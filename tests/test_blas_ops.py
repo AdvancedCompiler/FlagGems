@@ -404,3 +404,83 @@ def test_accuracy_addr(M, N, dtype):
         res_out = torch.addr(input_tensor, vec1, vec2, alpha=alpha, beta=beta)
 
     gems_assert_close(res_out, ref_out, dtype, equal_nan=True)
+
+
+@pytest.mark.cutlass_scaled_mm
+@pytest.mark.parametrize(
+    "M, N, K",
+    [
+        (1, 256, 128),
+        (1, 16384, 1024),
+        (1, 24576, 496),
+        (16, 256, 496),
+        (16, 16384, 128),
+        (16, 24576, 4096),
+        (32, 8192, 4096),
+        (32, 16384, 4096),
+        (33, 1024, 1024),
+        (33, 8192, 128),
+        (64, 2048, 496),
+        (64, 16384, 1024),
+        (100, 8192, 496),
+        (128, 32768, 4096),
+        (256, 4096, 4096),
+        (512, 256, 1024),
+        (512, 8192, 4096),
+        (512, 16384, 128),
+        (512, 24576, 128),
+    ],
+)
+@pytest.mark.parametrize("out_dtype", [torch.float16, torch.bfloat16])
+@pytest.mark.parametrize("use_bias", [True, False])
+def test_accuracy_cutlass_scaled_mm(M, N, K, out_dtype, use_bias):
+    def baseline_scaled_mm(
+        a: torch.Tensor,
+        b: torch.Tensor,
+        scale_a: torch.Tensor,
+        scale_b: torch.Tensor,
+        out_dtype: type[torch.dtype],
+        bias: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        def group_broadcast(t, shape):
+            for i, s in enumerate(shape):
+                if t.shape[i] != s and t.shape[i] != 1:
+                    assert s % t.shape[i] == 0
+                    t = (
+                        t.unsqueeze(i + 1)
+                        .expand(*t.shape[: i + 1], s // t.shape[i], *t.shape[i + 1 :])
+                        .flatten(i, i + 1)
+                    )
+            return t
+
+        scale_a = group_broadcast(scale_a, a.shape)
+        scale_b = group_broadcast(scale_b, b.shape)
+
+        output = torch.mm(
+            (scale_a * a.to(dtype=torch.float32)), (scale_b * b.to(dtype=torch.float32))
+        ).to(out_dtype)
+
+        if bias is not None:
+            output = output + bias
+
+        return output
+
+    def to_int8(tensor: torch.Tensor):
+        return torch.round(tensor.clamp(min=-128, max=127)).to(dtype=torch.int8)
+
+    a = to_int8(torch.randn((M, K), device=flag_gems.device) * 5)
+    b = to_int8(torch.randn((N, K), device=flag_gems.device).t() * 5)
+
+    scale_a = torch.randn((M,), device=flag_gems.device)
+    scale_b = torch.randn((N,), device=flag_gems.device)
+
+    bias = None
+    if use_bias:
+        bias = torch.randn((N,), dtype=out_dtype, device=flag_gems.device)
+
+    triton_res = flag_gems.cutlass_scaled_mm(a, b, scale_a, scale_b, out_dtype, bias)
+    baseline = baseline_scaled_mm(
+        a, b, scale_a.view((M, 1)), scale_b.view((1, N)), out_dtype, bias
+    )
+
+    assert torch.allclose(triton_res, baseline, rtol=1e-1, atol=1e0)

@@ -338,6 +338,17 @@ def custom_get_scheduler_metadata(
     )
 
 
+def custom_cutlass_scaled_mm(
+    input: torch.Tensor,
+    weight: torch.Tensor,
+    scale_a: torch.Tensor,
+    scale_b: torch.Tensor,
+    out_dtype: type[torch.dtype],
+    bias: torch.Tensor | None = None,
+):
+    return flag_gems.cutlass_scaled_mm(input, weight, scale_a, scale_b, out_dtype, bias)
+
+
 def apply_gems_patches_to_vllm(verbose=True):
     import vllm  # noqa: F401
     from vllm.attention.ops.paged_attn import PagedAttention
