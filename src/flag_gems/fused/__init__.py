@@ -4,6 +4,7 @@ from flag_gems.fused.flash_mla import flash_mla
 from flag_gems.fused.fused_add_rms_norm import fused_add_rms_norm
 from flag_gems.fused.geglu import dgeglu, geglu
 from flag_gems.fused.gelu_and_mul import gelu_and_mul
+from flag_gems.fused.grouped_topk import grouped_topk
 from flag_gems.fused.instance_norm import instance_norm
 from flag_gems.fused.moe_align_block_size import (
     moe_align_block_size,
@@ -47,4 +48,5 @@ __all__ = [
     "rwkv_mm_sparsity",
     "dreglu",
     "reglu",
+    "grouped_topk",
 ]
