@@ -478,9 +478,11 @@ def test_accuracy_cutlass_scaled_mm(M, N, K, out_dtype, use_bias):
     if use_bias:
         bias = torch.randn((N,), dtype=out_dtype, device=flag_gems.device)
 
-    triton_res = flag_gems.cutlass_scaled_mm(a, b, scale_a, scale_b, out_dtype, bias)
+    output = torch.empty((a.shape[0], b.shape[1]), dtype=out_dtype, device=a.device)
+
+    flag_gems.cutlass_scaled_mm(output, a, b, scale_a, scale_b, bias)
     baseline = baseline_scaled_mm(
         a, b, scale_a.view((M, 1)), scale_b.view((1, N)), out_dtype, bias
     )
 
-    assert torch.allclose(triton_res, baseline, rtol=1e-1, atol=1e0)
+    assert torch.allclose(output, baseline, rtol=1e-1, atol=1e0)

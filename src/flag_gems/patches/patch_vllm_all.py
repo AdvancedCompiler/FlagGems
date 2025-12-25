@@ -339,19 +339,19 @@ def custom_get_scheduler_metadata(
 
 
 def custom_cutlass_scaled_mm(
+    output: torch.Tensor,
     input: torch.Tensor,
     weight: torch.Tensor,
     scale_a: torch.Tensor,
     scale_b: torch.Tensor,
-    out_dtype: type[torch.dtype],
     bias: torch.Tensor | None = None,
 ):
-    return flag_gems.cutlass_scaled_mm(input, weight, scale_a, scale_b, out_dtype, bias)
+    return flag_gems.cutlass_scaled_mm(output, input, weight, scale_a, scale_b, bias)
 
 
 def apply_gems_patches_to_vllm(verbose=True):
     import vllm  # noqa: F401
-    import vllm._custom_ops as ops
+    import vllm._custom_ops as ops  # noqa: F401
     from vllm.attention.ops.paged_attn import PagedAttention
     from vllm.model_executor.layers.activation import SiluAndMul
     from vllm.model_executor.layers.layernorm import RMSNorm
@@ -376,8 +376,8 @@ def apply_gems_patches_to_vllm(verbose=True):
     patch_module_method(
         FlashAttentionImpl, "forward", custom_gems_flash_attention_impl_forward, verbose
     )
-    patch_module_method(ops, "cutlass_scaled_mm", custom_cutlass_scaled_mm, verbose)
     patch_vllm_lib("_C", "silu_and_mul", custom_silu_and_mul, "CUDA", verbose)
+    patch_vllm_lib("_C", "cutlass_scaled_mm", custom_cutlass_scaled_mm, "CUDA", verbose)
     patch_vllm_lib(
         "_moe_C", "moe_align_block_size", custom_moe_align_block_size, "CUDA", verbose
     )

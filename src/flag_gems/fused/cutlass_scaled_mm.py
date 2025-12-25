@@ -135,11 +135,11 @@ def scaled_mm_kernel(
 # input   - [M, K]
 # weight - [K, N]
 def triton_scaled_mm(
+    output: torch.Tensor,
     input: torch.Tensor,
     weight: torch.Tensor,
     scale_a: torch.Tensor,
     scale_b: torch.Tensor,
-    out_dtype: type[torch.dtype],
     bias: torch.Tensor | None = None,
     block_size_m: int = 32,
     block_size_n: int = 32,
@@ -148,6 +148,9 @@ def triton_scaled_mm(
 ) -> torch.Tensor:
     M, K = input.shape
     N = weight.shape[1]
+    out_dtype = output.dtype
+
+    assert output.shape == (M, N)
 
     assert N > 0 and K > 0 and M > 0
     assert weight.shape[0] == K
@@ -167,8 +170,6 @@ def triton_scaled_mm(
     grid = lambda META: (
         triton.cdiv(M, META["BLOCK_SIZE_M"]) * triton.cdiv(N, META["BLOCK_SIZE_N"]),
     )
-
-    result = torch.empty((M, N), dtype=out_dtype, device=input.device)
 
     has_scalar = lambda x: x.shape[0] == 1 and x.shape[1] == 1
 
@@ -191,14 +192,14 @@ def triton_scaled_mm(
 
     accumulator_dtype = tl.float32 if input.is_floating_point() else tl.int32
 
-    # A = input, B = weight, C = result
+    # A = input, B = weight, C = output
     # A = M x K, B = K x N, C = M x N
     scaled_mm_kernel[grid](
         input,
         weight,
         scale_a,
         scale_b,
-        result,
+        output,
         bias,
         M,
         N,
@@ -207,8 +208,8 @@ def triton_scaled_mm(
         input.stride(1),
         weight.stride(0),
         weight.stride(1),
-        result.stride(0),
-        result.stride(1),
+        output.stride(0),
+        output.stride(1),
         accumulator_dtype,
         BLOCK_SIZE_M=block_size_m,
         BLOCK_SIZE_N=block_size_n,
@@ -217,7 +218,7 @@ def triton_scaled_mm(
         BLOCK_SIZE_SCALE_B=block_size_sb,
     )
 
-    return result.to(out_dtype)
+    return output.to(out_dtype)
 
 
 cutlass_scaled_mm = triton_scaled_mm

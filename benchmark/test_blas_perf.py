@@ -351,56 +351,18 @@ def test_addr_benchmark():
     bench.run()
 
 
-class CutlassScaledMMTestKit:
-    out_dtypes = [torch.float16, torch.bfloat16]
-
-    atol = 1e0
-    rtol = 1e-1
-
-    def baseline_scaled_mm(
-        a: torch.Tensor,
-        b: torch.Tensor,
-        scale_a: torch.Tensor,
-        scale_b: torch.Tensor,
-        out_dtype: type[torch.dtype],
-        bias: torch.Tensor | None = None,
-    ) -> torch.Tensor:
-        def group_broadcast(t, shape):
-            for i, s in enumerate(shape):
-                if t.shape[i] != s and t.shape[i] != 1:
-                    assert s % t.shape[i] == 0
-                    t = (
-                        t.unsqueeze(i + 1)
-                        .expand(*t.shape[: i + 1], s // t.shape[i], *t.shape[i + 1 :])
-                        .flatten(i, i + 1)
-                    )
-            return t
-
-        scale_a = group_broadcast(scale_a, a.shape)
-        scale_b = group_broadcast(scale_b, b.shape)
-
-        output = torch.mm(
-            (scale_a * a.to(dtype=torch.float32)), (scale_b * b.to(dtype=torch.float32))
-        ).to(out_dtype)
-
-        if bias is not None:
-            output = output + bias
-
-        return output
-
-
 class CutlassScaledMMBenchmark(Benchmark):
     """
     benchmark for cutlass_scaled_mm
     """
 
-    TestKit = CutlassScaledMMTestKit
-
     def __init__(self):
         out_dtypes = [torch.float16, torch.bfloat16]
-        from vllm._custom_ops import cutlass_scaled_mm
+        import vllm._custom_ops as ops  # noqa: F401
 
-        super().__init__("cutlass_scaled_mm", cutlass_scaled_mm, out_dtypes)
+        super().__init__(
+            "cutlass_scaled_mm", torch.ops._C.cutlass_scaled_mm, out_dtypes
+        )
         self.set_gems(flag_gems.cutlass_scaled_mm)
 
     def set_more_shapes(self):
@@ -456,7 +418,9 @@ class CutlassScaledMMBenchmark(Benchmark):
             if use_bias:
                 bias = torch.randn((N,), dtype=dtype, device=flag_gems.device)
 
-            yield (a, b, scale_a, scale_b, dtype, bias)
+            output = torch.empty((a.shape[0], b.shape[1]), dtype=dtype, device=a.device)
+
+            yield (output, a, b, scale_a, scale_b, bias)
 
 
 def if_vllm_ok():
