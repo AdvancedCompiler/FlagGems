@@ -167,7 +167,7 @@ c = ops.mm(a, b)
 
 FlagGems 相比 Torch Eager 模式下 ATen 算子库的加速比如下图所示。其中，每个算子的加速比综合了多个形状测例的数据，代表该算子的整体性能。
 
-![算子加速比](./docs/assets/speedup-20250423.png)
+![算子加速比](./docs/assets/speedup-20251225.png)
 
 ## 贡献代码
 
