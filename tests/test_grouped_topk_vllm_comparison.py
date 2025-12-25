@@ -1,138 +1,253 @@
-# test_simple.py
-import itertools
-
+import pytest
 import torch
 
-from flag_gems import grouped_topk
+import flag_gems
+
+from .accuracy_utils import gems_assert_equal
+from .conftest import QUICK_MODE
+
+try:
+    from vllm._custom_ops import grouped_topk as vllm_grouped_topk
+
+    HAS_VLLM = True
+except ImportError:
+    HAS_VLLM = False
+    vllm_grouped_topk = None
 
 
-def get_vllm_grouped_topk():
-    try:
-        from vllm._custom_ops import grouped_topk as vllm_grouped_topk
+N_TOKEN_LIST = [1, 3, 8] if not QUICK_MODE else [8]
+N_EXPERT_LIST = [8, 16] if not QUICK_MODE else [16]
+N_GROUP_LIST = [2, 4] if not QUICK_MODE else [4]
+TOPK_LIST = [1, 2] if not QUICK_MODE else [2]
+RENORMALIZE_LIST = [True, False] if not QUICK_MODE else [True]
+SCORING_FUNC_LIST = [0, 1] if not QUICK_MODE else [0]
+DTYPE_LIST = [torch.bfloat16, torch.float32] if not QUICK_MODE else [torch.float32]
 
-        return vllm_grouped_topk
-    except (ImportError, AttributeError):
-        raise RuntimeError(
-            "❌ vLLM grouped_topk not available. "
-            "Please ensure vLLM is installed with custom ops enabled."
-        )
+LARGE_SCALE_DTYPE_LIST = [torch.float32, torch.bfloat16]
 
 
-def run_one_case(
-    scores,
-    bias,
+def check_valid_config(n_expert, n_group, topk):
+    if n_expert % n_group != 0:
+        return False
+    return True
+
+
+def get_tolerance(dtype, scoring_func, renormalize):
+    if dtype == torch.bfloat16:
+        return 5e-3, 1e-3
+    elif dtype == torch.float16:
+        if scoring_func == 1:
+            return 1e-3, 1e-4
+        else:
+            return 5e-3, 1e-3
+    else:
+        if renormalize:
+            return 5e-4, 1e-4
+        else:
+            return 1e-5, 1e-5
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+@pytest.mark.skipif(not HAS_VLLM, reason="vLLM is not installed")
+@pytest.mark.grouped_topk
+@pytest.mark.parametrize("n_token", N_TOKEN_LIST)
+@pytest.mark.parametrize("n_expert", N_EXPERT_LIST)
+@pytest.mark.parametrize("n_group", N_GROUP_LIST)
+@pytest.mark.parametrize("topk", TOPK_LIST)
+@pytest.mark.parametrize("renormalize", RENORMALIZE_LIST)
+@pytest.mark.parametrize("scoring_func", SCORING_FUNC_LIST)
+@pytest.mark.parametrize("dtype", DTYPE_LIST)
+def test_accuracy_grouped_topk(
+    n_token,
+    n_expert,
     n_group,
-    topk_group,
     topk,
     renormalize,
-    routed_scaling_factor=1.0,
-    scoring_func=0,
+    scoring_func,
+    dtype,
 ):
-    # device = scores.device
-    vllm_grouped_topk = get_vllm_grouped_topk()
+    """Test grouped_topk accuracy against vLLM CUDA implementation"""
+    if not check_valid_config(n_expert, n_group, topk):
+        pytest.skip("Invalid config")
 
-    # FlagGems
-    fg_values, fg_indices = grouped_topk(
-        scores=scores,
-        n_group=n_group,
-        topk_group=topk_group,
-        topk=topk,
-        renormalize=renormalize,
-        routed_scaling_factor=routed_scaling_factor,
-        bias=bias,
-        scoring_func=scoring_func,
-    )
-
-    # vLLM
-    vllm_values, vllm_indices = vllm_grouped_topk(
-        scores=scores,
-        num_expert_group=n_group,
-        topk_group=topk_group,
-        topk=topk,
-        renormalize=renormalize,
-        routed_scaling_factor=routed_scaling_factor,
-        bias=bias,
-        scoring_func=scoring_func,
-    )
-
-    # correctness check
-    if not torch.allclose(fg_values, vllm_values, atol=1e-5, rtol=1e-5):
-        raise AssertionError(
-            f"❌ values mismatch\n" f"FlagGems:\n{fg_values}\n" f"vLLM:\n{vllm_values}"
-        )
-
-    if not torch.equal(fg_indices, vllm_indices):
-        raise AssertionError(
-            f"❌ indices mismatch\n"
-            f"FlagGems:\n{fg_indices}\n"
-            f"vLLM:\n{vllm_indices}"
-        )
-
-
-def run_tests():
     torch.manual_seed(45)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    torch.cuda.manual_seed(45)
 
-    # -------------------------------
-    # test configurations
-    # -------------------------------
-    token_sizes = [1, 3, 8]
-    expert_sizes = [8, 16]
-    n_groups = [2, 4]
-    topks = [1, 2]
-    dtypes = [torch.bfloat16, torch.float32]
-    # dtypes = [torch.bfloat16]
+    topk_group = topk
+    routed_scaling_factor = 1.0
 
-    total = 0
-    passed = 0
+    scores = torch.randn((n_token, n_expert), dtype=dtype, device=flag_gems.device)
+    bias = torch.randn((n_expert,), dtype=dtype, device=flag_gems.device)
 
-    for (
-        num_tokens,
-        num_experts,
+    ref_topk_weights, ref_topk_ids = vllm_grouped_topk(
+        scores.clone(),
         n_group,
+        topk_group,
         topk,
-        dtype,
-    ) in itertools.product(
-        token_sizes,
-        expert_sizes,
-        n_groups,
-        topks,
-        dtypes,
-    ):
-        scores = torch.randn(num_tokens, num_experts, device=device, dtype=dtype)
-        # bias = torch.randn((num_experts,), dtype=torch.float32, device=device)#gems√ vllm×
-        bias = torch.randn((num_experts,), dtype=dtype, device=device)
+        renormalize,
+        routed_scaling_factor,
+        bias,
+        scoring_func,
+    )
 
-        print(
-            f"\n=== Test case === "
-            f"T={num_tokens}, E={num_experts}, "
-            f"G={n_group}, topk={topk}, dtype={dtype}"
+    with flag_gems.use_gems():
+        res_topk_weights, res_topk_ids = flag_gems.grouped_topk(
+            scores.clone(),
+            n_group,
+            topk_group,
+            topk,
+            renormalize,
+            routed_scaling_factor,
+            bias,
+            scoring_func,
         )
-        # print(f"scores:{scores}")
-        # print(f"bias:{bias}")
-        # print(f"scores+bias{scores + bias}")
 
-        try:
-            run_one_case(
-                scores=scores,
-                bias=bias,  # dtype=dtype时可以测试通过，dtype=torch.float32时dtypes=torch.bfloat16时大部分例子报错
-                n_group=n_group,
-                topk_group=topk,
-                topk=topk,
-                renormalize=False,  # todo:renormalize=True
-                routed_scaling_factor=1.0,  # todo：renormalize=True对齐vllm后需测试不同的数值
-                scoring_func=0,  # todo:scoring_func=1
-            )
-            print("✅ PASS")
-            passed += 1
-        except Exception:
-            print("❌ FAIL")
-            raise
+    gems_assert_equal(res_topk_ids, ref_topk_ids)
 
-        total += 1
-
-    print(f"\n🎉 Summary: {passed}/{total} cases passed")
+    atol, rtol = get_tolerance(dtype, scoring_func, renormalize)
+    torch.testing.assert_close(res_topk_weights, ref_topk_weights, atol=atol, rtol=rtol)
 
 
-if __name__ == "__main__":
-    run_tests()
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+@pytest.mark.skipif(not HAS_VLLM, reason="vLLM is not installed")
+@pytest.mark.grouped_topk
+@pytest.mark.parametrize("n_token", [32, 64])
+@pytest.mark.parametrize("n_expert", [64])
+@pytest.mark.parametrize("n_group", [8])
+@pytest.mark.parametrize("topk", [8])
+@pytest.mark.parametrize("topk_group", [2])
+@pytest.mark.parametrize("renormalize", [True, False])
+@pytest.mark.parametrize("scoring_func", [0, 1])
+@pytest.mark.parametrize("dtype", LARGE_SCALE_DTYPE_LIST)
+def test_accuracy_grouped_topk_large_scale(
+    n_token,
+    n_expert,
+    n_group,
+    topk,
+    topk_group,
+    renormalize,
+    scoring_func,
+    dtype,
+):
+    """Test grouped_topk with larger scale configurations"""
+    torch.manual_seed(0)
+    torch.cuda.manual_seed(0)
+
+    routed_scaling_factor = 1.0
+
+    scores = torch.randn((n_token, n_expert), dtype=dtype, device=flag_gems.device)
+    bias = torch.randn((n_expert,), dtype=dtype, device=flag_gems.device)
+
+    ref_topk_weights, ref_topk_ids = vllm_grouped_topk(
+        scores.clone(),
+        n_group,
+        topk_group,
+        topk,
+        renormalize,
+        routed_scaling_factor,
+        bias,
+        scoring_func,
+    )
+
+    with flag_gems.use_gems():
+        res_topk_weights, res_topk_ids = flag_gems.grouped_topk(
+            scores.clone(),
+            n_group,
+            topk_group,
+            topk,
+            renormalize,
+            routed_scaling_factor,
+            bias,
+            scoring_func,
+        )
+
+    gems_assert_equal(res_topk_ids, ref_topk_ids)
+
+    atol, rtol = get_tolerance(dtype, scoring_func, renormalize)
+    torch.testing.assert_close(res_topk_weights, ref_topk_weights, atol=atol, rtol=rtol)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+@pytest.mark.skipif(not HAS_VLLM, reason="vLLM is not installed")
+@pytest.mark.grouped_topk
+@pytest.mark.parametrize("routed_scaling_factor", [1.0, 2.5])
+@pytest.mark.parametrize("renormalize", [True, False])
+def test_accuracy_grouped_topk_scaling_factor(routed_scaling_factor, renormalize):
+    """Test grouped_topk with different scaling factors"""
+    torch.manual_seed(45)
+    torch.cuda.manual_seed(45)
+
+    dtype = torch.float32
+    scores = torch.randn((8, 16), dtype=dtype, device=flag_gems.device)
+    bias = torch.randn((16,), dtype=dtype, device=flag_gems.device)
+
+    ref_weights, ref_ids = vllm_grouped_topk(
+        scores.clone(), 4, 2, 2, renormalize, routed_scaling_factor, bias, 0
+    )
+
+    with flag_gems.use_gems():
+        res_weights, res_ids = flag_gems.grouped_topk(
+            scores.clone(), 4, 2, 2, renormalize, routed_scaling_factor, bias, 0
+        )
+
+    gems_assert_equal(res_ids, ref_ids)
+
+    atol, rtol = get_tolerance(dtype, 0, renormalize)
+    torch.testing.assert_close(res_weights, ref_weights, atol=atol, rtol=rtol)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+@pytest.mark.skipif(not HAS_VLLM, reason="vLLM is not installed")
+@pytest.mark.grouped_topk
+@pytest.mark.parametrize("renormalize", [True, False])
+@pytest.mark.parametrize("scoring_func", [0, 1])
+def test_accuracy_grouped_topk_single_token(renormalize, scoring_func):
+    """Test grouped_topk with single token"""
+    torch.manual_seed(45)
+    torch.cuda.manual_seed(45)
+
+    dtype = torch.float32
+    scores = torch.randn((1, 16), dtype=dtype, device=flag_gems.device)
+    bias = torch.randn((16,), dtype=dtype, device=flag_gems.device)
+
+    ref_weights, ref_ids = vllm_grouped_topk(
+        scores.clone(), 4, 2, 2, renormalize, 1.0, bias, scoring_func
+    )
+
+    with flag_gems.use_gems():
+        res_weights, res_ids = flag_gems.grouped_topk(
+            scores.clone(), 4, 2, 2, renormalize, 1.0, bias, scoring_func
+        )
+
+    gems_assert_equal(res_ids, ref_ids)
+
+    atol, rtol = get_tolerance(dtype, scoring_func, renormalize)
+    torch.testing.assert_close(res_weights, ref_weights, atol=atol, rtol=rtol)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+@pytest.mark.skipif(not HAS_VLLM, reason="vLLM is not installed")
+@pytest.mark.grouped_topk
+@pytest.mark.parametrize("renormalize", [True, False])
+def test_accuracy_grouped_topk_sigmoid(renormalize):
+    """Test grouped_topk with sigmoid scoring function"""
+    torch.manual_seed(45)
+    torch.cuda.manual_seed(45)
+
+    dtype = torch.float32
+    scores = torch.randn((8, 16), dtype=dtype, device=flag_gems.device)
+    bias = torch.randn((16,), dtype=dtype, device=flag_gems.device)
+
+    ref_weights, ref_ids = vllm_grouped_topk(
+        scores.clone(), 4, 2, 2, renormalize, 1.0, bias, 1
+    )
+
+    with flag_gems.use_gems():
+        res_weights, res_ids = flag_gems.grouped_topk(
+            scores.clone(), 4, 2, 2, renormalize, 1.0, bias, 1
+        )
+
+    gems_assert_equal(res_ids, ref_ids)
+
+    atol, rtol = get_tolerance(dtype, 1, renormalize)
+    torch.testing.assert_close(res_weights, ref_weights, atol=atol, rtol=rtol)

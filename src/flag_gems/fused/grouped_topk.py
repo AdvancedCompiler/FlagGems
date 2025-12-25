@@ -1,6 +1,7 @@
 import torch
 import triton
 import triton.language as tl
+from triton.language.extra.cuda import libdevice
 
 
 @triton.jit
@@ -9,17 +10,17 @@ def topk_with_k2_triton(
     bias_ptr,
     group_scores_ptr,
     num_experts_per_group,
-    n_group,
+    num_expert_group,
     stride_scores_token,
-    stride_bias_group,
     stride_group_scores_token,
     scoring_func: tl.constexpr,
     BLOCK_SIZE: tl.constexpr,
+    INPUT_DTYPE: tl.constexpr,
 ):
     pid = tl.program_id(0)
 
-    token_id = pid // n_group
-    group_id = pid % n_group
+    token_id = pid // num_expert_group
+    group_id = pid % num_expert_group
 
     lane = tl.arange(0, BLOCK_SIZE)
     mask = lane < num_experts_per_group
@@ -39,27 +40,30 @@ def topk_with_k2_triton(
         other=0.0,
     )
 
-    x = x.to(tl.float32)
-    if scoring_func == 1:  # sigmoid
-        x = 1.0 / (1.0 + tl.exp(-x))
+    if scoring_func == 1:
+        x_f32 = x.to(tl.float32)
+        x_f32 = 0.5 * libdevice.tanh(0.5 * x_f32) + 0.5
+        x = x_f32.to(INPUT_DTYPE)
 
     x = x + b
 
-    max1 = tl.max(x, axis=0)
-    is_max1 = (x == max1) & mask
-    count_max1 = tl.sum(is_max1, axis=0)
+    x_f32 = x.to(tl.float32)
+
+    max1 = tl.max(x_f32, axis=0)
+    is_max1 = (x_f32 == max1) & mask
+    count_max1 = tl.sum(is_max1.to(tl.int32), axis=0)
 
     x2 = tl.where(
         is_max1 & (count_max1 == 1),
         -float("inf"),
-        x,
+        x_f32,
     )
     max2 = tl.max(x2, axis=0)
 
     group_scores_offset = token_id * stride_group_scores_token + group_id
     tl.store(
         group_scores_ptr + group_scores_offset,
-        max1 + max2,
+        (max1 + max2).to(INPUT_DTYPE),
     )
 
 
@@ -71,13 +75,14 @@ def group_idx_and_topk_triton(
     topk_indices_ptr,
     bias_ptr,
     num_tokens,
-    n_group,
+    num_expert_group,
     topk_group,
     topk,
     num_experts,
     num_experts_per_group,
     renormalize: tl.constexpr,
-    routed_scaling_factor: tl.constexpr,
+    routed_scaling_factor,
+    scoring_func: tl.constexpr,
     stride_scores_token,
     stride_group_scores_token,
     stride_out_token,
@@ -86,16 +91,16 @@ def group_idx_and_topk_triton(
     TOPK: tl.constexpr,
     BLOCK_GROUP: tl.constexpr,
     BLOCK_EXPERT: tl.constexpr,
+    INPUT_DTYPE: tl.constexpr,
 ):
     pid = tl.program_id(0)
     if pid >= num_tokens:
         return
 
     neg_inf = -float("inf")
-    valid_token = pid < num_tokens
 
     group_offsets = tl.arange(0, BLOCK_GROUP)
-    valid_group = group_offsets < n_group
+    valid_group = group_offsets < num_expert_group
 
     group_scores = tl.load(
         group_scores_ptr + pid * stride_group_scores_token + group_offsets,
@@ -103,9 +108,18 @@ def group_idx_and_topk_triton(
         other=neg_inf,
     )
 
-    value = tl.where(valid_group, group_scores, neg_inf)
-    target_num_min = BLOCK_GROUP - n_group + topk_group
-    count_equal_to_top_value = BLOCK_GROUP - n_group
+    group_scores_f32 = group_scores.to(tl.float32)
+    is_finite = (group_scores_f32 == group_scores_f32) & (
+        group_scores_f32 != float("inf")
+    )
+    group_scores_f32 = tl.where(is_finite & valid_group, group_scores_f32, neg_inf)
+
+    max_group_score = tl.max(group_scores_f32, axis=0)
+    if_proceed = max_group_score != neg_inf
+
+    value = group_scores_f32
+    target_num_min = BLOCK_GROUP - num_expert_group + topk_group
+    count_equal_to_top_value = BLOCK_GROUP - num_expert_group
     pre_count_equal_to_top_value = 0
     topk_group_value = neg_inf
 
@@ -113,10 +127,10 @@ def group_idx_and_topk_triton(
         need = count_equal_to_top_value < target_num_min
         max_val = tl.max(value, axis=0)
 
-        mask = need & (value == max_val)
-        value = tl.where(mask, neg_inf, value)
+        is_max = need & (value == max_val)
+        value = tl.where(is_max, neg_inf, value)
 
-        newly = tl.sum(mask, axis=0).to(tl.int32)
+        newly = tl.sum(is_max.to(tl.int32), axis=0)
 
         pre_count_equal_to_top_value = tl.where(
             need, count_equal_to_top_value, pre_count_equal_to_top_value
@@ -124,17 +138,14 @@ def group_idx_and_topk_triton(
         count_equal_to_top_value = tl.where(
             need, count_equal_to_top_value + newly, count_equal_to_top_value
         )
-
         topk_group_value = tl.where(need, max_val, topk_group_value)
 
     num_equalto_topkth_group = target_num_min - pre_count_equal_to_top_value
 
-    group_gt = group_scores > topk_group_value
-    group_eq = group_scores == topk_group_value
+    group_gt = group_scores_f32 > topk_group_value
+    group_eq = group_scores_f32 == topk_group_value
 
     eq_i = group_eq.to(tl.int32)
-    prefix_eq = tl.zeros([BLOCK_GROUP], dtype=tl.int32)
-
     prefix_eq = tl.cumsum(eq_i, axis=0) - eq_i
 
     group_selected = (
@@ -143,81 +154,97 @@ def group_idx_and_topk_triton(
 
     expert_offsets = tl.arange(0, BLOCK_EXPERT)
     valid_expert = expert_offsets < num_experts
-    expert_group = expert_offsets // num_experts_per_group  # [BLOCK_EXPERT]
+    expert_group = expert_offsets // num_experts_per_group
+
     expert_in_group = expert_group[:, None] == group_offsets[None, :]
-
     expert_selected = (
-        tl.sum(expert_in_group & group_selected[None, :], axis=1).to(tl.int1)
-        & valid_expert
-    )
+        tl.sum((expert_in_group & group_selected[None, :]).to(tl.int32), axis=1) > 0
+    ) & valid_expert
 
-    expert_scores = tl.load(
+    raw_scores = tl.load(
         scores_ptr + pid * stride_scores_token + expert_offsets,
         mask=expert_selected,
-        other=-float("inf"),
+        other=neg_inf,
     )
 
-    if bias_ptr is not None:
-        expert_scores += tl.load(
-            bias_ptr + expert_offsets,
-            mask=valid_expert,
-            other=0.0,
-        )
+    expert_bias = tl.load(
+        bias_ptr + expert_offsets,
+        mask=valid_expert,
+        other=0.0,
+    )
 
-    expert_scores = tl.where(
+    if scoring_func == 1:
+        scored_f32 = raw_scores.to(tl.float32)
+        scored_f32 = 0.5 * libdevice.tanh(0.5 * scored_f32) + 0.5
+        scored = scored_f32.to(INPUT_DTYPE)
+    else:
+        scored = raw_scores
+
+    selection_scores_native = scored + expert_bias
+
+    selection_scores = tl.where(
         expert_selected,
-        expert_scores,
-        -float("inf"),
+        selection_scores_native.to(tl.float32),
+        neg_inf,
     )
 
-    topk_vals = tl.full([TOPK], -float("inf"), tl.float32)
+    topk_vals = tl.full([TOPK], 0.0, tl.float32)
     topk_idx = tl.full([TOPK], 0, tl.int32)
+    pos_range = tl.arange(0, TOPK)
 
     for i in range(TOPK):
-        max_val = tl.max(expert_scores, axis=0)
-        mask = expert_scores == max_val
-        idx = tl.where(mask, expert_offsets, num_experts + 1)
-        idx = tl.min(idx, axis=0)
+        max_val = tl.max(selection_scores, axis=0)
+        is_max = selection_scores == max_val
 
-        selected_score = tl.load(
-            scores_ptr + pid * stride_scores_token + idx,
+        candidate_idx = tl.where(is_max, expert_offsets, num_experts + 1)
+        selected_idx = tl.min(candidate_idx, axis=0)
+
+        selected_raw = tl.load(
+            scores_ptr + pid * stride_scores_token + selected_idx
+        ).to(tl.float32)
+
+        if scoring_func == 1:
+            selected_score = 0.5 * libdevice.tanh(0.5 * selected_raw) + 0.5
+        else:
+            selected_score = selected_raw
+
+        topk_vals = tl.where(pos_range == i, selected_score, topk_vals)
+        topk_idx = tl.where(pos_range == i, selected_idx.to(tl.int32), topk_idx)
+
+        selection_scores = tl.where(
+            expert_offsets == selected_idx, neg_inf, selection_scores
         )
 
-        topk_vals = tl.where(
-            tl.arange(0, TOPK) == i,
-            selected_score,
-            topk_vals,
-        )
-        topk_idx = tl.where(
-            tl.arange(0, TOPK) == i,
-            idx,
-            topk_idx,
-        )
+    if renormalize:
+        topk_sum = tl.sum(topk_vals, axis=0) + 1e-20
+        scale = routed_scaling_factor / topk_sum
+    else:
+        scale = routed_scaling_factor
 
-        expert_scores = tl.where(expert_offsets == idx, -float("inf"), expert_scores)
+    topk_vals = topk_vals * scale
 
-        if renormalize:
-            probs = tl.softmax(topk_vals)
-            topk_vals = probs * routed_scaling_factor
+    default_idx = pos_range.to(tl.int32)
+    default_vals = tl.full([TOPK], 1.0 / topk, tl.float32)
 
-    out_offsets = tl.arange(0, TOPK)
+    final_vals = tl.where(if_proceed, topk_vals, default_vals)
+    final_idx = tl.where(if_proceed, topk_idx, default_idx)
 
     tl.store(
-        topk_values_ptr + pid * stride_out_token + out_offsets,
-        topk_vals,
-        mask=valid_token,
+        topk_values_ptr + pid * stride_out_token + pos_range,
+        final_vals,
+        mask=pos_range < topk,
     )
 
     tl.store(
-        topk_indices_ptr + pid * stride_out_token + out_offsets,
-        topk_idx,
-        mask=valid_token,
+        topk_indices_ptr + pid * stride_out_token + pos_range,
+        final_idx,
+        mask=pos_range < topk,
     )
 
 
 def grouped_topk(
     scores: torch.Tensor,
-    n_group: int,
+    num_expert_group: int,
     topk_group: int,
     topk: int,
     renormalize: bool,
@@ -228,19 +255,30 @@ def grouped_topk(
     if scores.ndim != 2:
         raise ValueError("scores must be a 2D Tensor")
     num_tokens, num_experts = scores.shape
-    if num_experts % n_group != 0:
-        raise ValueError("num_experts must be divisible by n_group")
-    if n_group > 32:
-        raise ValueError("n_group should be smaller than or equal to 32")
+    if num_experts % num_expert_group != 0:
+        raise ValueError("num_experts must be divisible by num_expert_group")
+    if num_expert_group > 32:
+        raise ValueError("num_expert_group should be smaller than or equal to 32")
     if topk > 32:
         raise ValueError("topk should be smaller than or equal to 32 for now")
-    # if scoring_func not in (SCORING_NONE, SCORING_SIGMOID):
-    #     raise ValueError("scoring_func must be SCORING_NONE (0) or SCORING_SIGMOID (1)")
+    if scoring_func not in (0, 1):
+        raise ValueError("scoring_func must be 0 (none) or 1 (sigmoid)")
+    if bias.dtype != scores.dtype:
+        bias = bias.to(scores.dtype)
 
-    num_experts_per_group = num_experts // n_group
+    num_experts_per_group = num_experts // num_expert_group
+
+    if scores.dtype == torch.float32:
+        INPUT_DTYPE = tl.float32
+    elif scores.dtype == torch.float16:
+        INPUT_DTYPE = tl.float16
+    elif scores.dtype == torch.bfloat16:
+        INPUT_DTYPE = tl.bfloat16
+    else:
+        raise ValueError(f"Unsupported dtype: {scores.dtype}")
 
     group_scores = torch.empty(
-        (num_tokens, n_group),
+        (num_tokens, num_expert_group),
         device=scores.device,
         dtype=scores.dtype,
     )
@@ -258,22 +296,22 @@ def grouped_topk(
     )
 
     BLOCK1 = triton.next_power_of_2(num_experts_per_group)
-    grid1 = (num_tokens * n_group,)
+    grid1 = (num_tokens * num_expert_group,)
 
     topk_with_k2_triton[grid1](
         scores,
         bias,
         group_scores,
         num_experts_per_group,
-        n_group,
+        num_expert_group,
         scores.stride(0),
-        bias.stride(0),
         group_scores.stride(0),
         scoring_func,
         BLOCK_SIZE=BLOCK1,
+        INPUT_DTYPE=INPUT_DTYPE,
     )
 
-    BLOCK2 = triton.next_power_of_2(n_group)
+    BLOCK_GROUP = triton.next_power_of_2(num_expert_group)
     BLOCK_EXPERT = triton.next_power_of_2(num_experts)
     grid2 = (num_tokens,)
 
@@ -284,20 +322,23 @@ def grouped_topk(
         topk_indices,
         bias,
         num_tokens,
-        n_group,
+        num_expert_group,
         topk_group,
         topk,
         num_experts,
         num_experts_per_group,
         renormalize,
         routed_scaling_factor,
+        scoring_func,
         scores.stride(0),
         group_scores.stride(0),
         topk_values.stride(0),
-        N_GROUP=n_group,
+        N_GROUP=num_expert_group,
         TOPK_GROUP=topk_group,
         TOPK=topk,
-        BLOCK_GROUP=BLOCK2,
+        BLOCK_GROUP=BLOCK_GROUP,
         BLOCK_EXPERT=BLOCK_EXPERT,
+        INPUT_DTYPE=INPUT_DTYPE,
     )
+
     return topk_values, topk_indices
