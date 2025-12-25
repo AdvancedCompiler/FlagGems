@@ -218,7 +218,7 @@ def triton_scaled_mm(
         BLOCK_SIZE_SCALE_B=block_size_sb,
     )
 
-    return output.to(out_dtype)
+    return output
 
 
 cutlass_scaled_mm = triton_scaled_mm
