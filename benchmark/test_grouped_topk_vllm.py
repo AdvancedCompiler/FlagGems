@@ -45,14 +45,14 @@ class GroupedTopKBenchmark(Benchmark):
             yield from self.grouped_topk_input_fn(config, cur_dtype, self.device)
 
     def grouped_topk_input_fn(self, config, dtype, device):
-        num_tokens, num_experts, num_expert_group, topk_group, topk = config
+        num_tokens, num_experts, n_group, topk_group, topk = config
 
         scores = torch.randn(num_tokens, num_experts, device=device, dtype=dtype)
         bias = torch.randn(num_experts, device=device, dtype=dtype)
 
         yield (
             scores,
-            num_expert_group,
+            n_group,
             topk_group,
             topk,
             self.renormalize,

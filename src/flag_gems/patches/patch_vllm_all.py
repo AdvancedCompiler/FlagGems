@@ -288,15 +288,26 @@ def custom_moe_grouped_topk(
     from flag_gems.fused import grouped_topk
 
     if bias is None:
-        bias = torch.zeros(num_experts, device=gating_output.device)
+        bias = torch.zeros(
+            num_experts, device=gating_output.device, dtype=gating_output.dtype
+        )
+    else:
+        if not isinstance(bias, torch.Tensor):
+            bias = torch.tensor(
+                bias, device=gating_output.device, dtype=gating_output.dtype
+            )
+
+        bias = bias.to(device=gating_output.device, dtype=gating_output.dtype)
+
     return grouped_topk(
         scores=gating_output,
         n_group=n_group,
         topk_group=topk_group,
         topk=topk,
-        renormalize=renormalize,
+        renormalize=bool(renormalize),
         routed_scaling_factor=routed_scaling_factor,
         bias=bias,
+        scoring_func=0,
     )
 
 
