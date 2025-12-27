@@ -389,31 +389,51 @@ class CutlassScaledMMBenchmark(Benchmark):
             (512, 16384, 128),
             (512, 24576, 128),
         ]
-        from random import shuffle
+        from random import seed, shuffle
+
+        seed(42)
 
         shuffle(MNK_FACTORS)
         MNK_FACTORS = MNK_FACTORS[:8]
         if_use_bias = [True, False]
+        dequantization_modes = ["Per-token", "Block-wise"]
 
         extended_shapes = []
         for shape in MNK_FACTORS:
             for use_bias in if_use_bias:
-                extended_shapes.append((*shape, use_bias))
+                for dequantization_mode in dequantization_modes:
+                    extended_shapes.append((*shape, use_bias, dequantization_mode))
 
-        return extended_shapes
+        shuffle(extended_shapes)
+
+        return extended_shapes[:8]
 
     def get_input_iter(self, dtype):
-        for M, N, K, use_bias in self.shapes:
+        for M, N, K, use_bias, dequantization_mode in self.shapes:
 
             def to_int8(tensor: torch.Tensor):
                 return torch.round(tensor.clamp(min=-128, max=127)).to(dtype=torch.int8)
 
-            a = to_int8(torch.randn((M, K), device=flag_gems.device) * 5)
-            b = to_int8(torch.randn((N, K), device=flag_gems.device).t() * 5)
+            def to_fp8(tensor: torch.Tensor):
+                finfo = torch.finfo(torch.float8_e4m3fn)
+                return torch.round(tensor.clamp(min=finfo.min, max=finfo.max)).to(
+                    dtype=torch.float8_e4m3fn
+                )
 
-            scale_a = torch.randn((M,), device=flag_gems.device)
-            scale_b = torch.randn((N,), device=flag_gems.device)
+            if dequantization_mode == "Per-token":
+                a = to_int8(torch.randn((M, K), device=flag_gems.device))
+                b = to_int8(torch.randn((N, K), device=flag_gems.device).t() * 5)
+                scale_a = torch.randn((M,), device=flag_gems.device)
+                scale_b = torch.randn((N,), device=flag_gems.device)
+            else:
+                from math import ceil
 
+                a = to_fp8(torch.randn((M, K), device=flag_gems.device))
+                b = to_fp8(torch.randn((N, K), device=flag_gems.device).t())
+                scale_a = torch.randn((M, ceil(K / 128)), device=flag_gems.device)
+                scale_b = torch.randn(
+                    (ceil(K / 128), ceil(N / 128)), device=flag_gems.device
+                )
             bias = None
             if use_bias:
                 bias = torch.randn((N,), dtype=dtype, device=flag_gems.device)

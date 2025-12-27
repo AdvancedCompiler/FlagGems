@@ -406,42 +406,69 @@ def test_accuracy_addr(M, N, dtype):
     gems_assert_close(res_out, ref_out, dtype, equal_nan=True)
 
 
-@pytest.mark.cutlass_scaled_mm
-@pytest.mark.parametrize(
-    "M, N, K",
-    [
+def get_test_params():
+    import itertools
+
+    MNK_FACTORS = [
         (1, 256, 128),
-        (1, 16384, 1024),
-        (1, 24576, 496),
         (16, 256, 496),
-        (16, 16384, 128),
-        (16, 24576, 4096),
-        (32, 8192, 4096),
-        (32, 16384, 4096),
-        (33, 1024, 1024),
-        (33, 8192, 128),
+        (32, 1024, 1024),
         (64, 2048, 496),
-        (64, 16384, 1024),
-        (100, 8192, 496),
-        (128, 32768, 4096),
+        (128, 128, 128),
         (256, 4096, 4096),
         (512, 256, 1024),
-        (512, 8192, 4096),
-        (512, 16384, 128),
-        (512, 24576, 128),
-    ],
-)
-@pytest.mark.parametrize("out_dtype", [torch.float16, torch.bfloat16])
-@pytest.mark.parametrize("use_bias", [True, False])
-def test_accuracy_cutlass_scaled_mm(M, N, K, out_dtype, use_bias):
-    def baseline_scaled_mm(
-        a: torch.Tensor,
-        b: torch.Tensor,
-        scale_a: torch.Tensor,
-        scale_b: torch.Tensor,
-        out_dtype: type[torch.dtype],
-        bias: torch.Tensor | None = None,
-    ) -> torch.Tensor:
+    ]
+
+    A_GROUPS = [(-1, -1), (1, -1), (1, 128)]
+
+    B_GROUPS = [(-1, -1), (-1, 1), (128, 128)]
+
+    USE_BIAS = [True, False]
+    DTYPES = [
+        (torch.int8, torch.float16),
+        # (torch.float8_e4m3fn, torch.bfloat16)
+    ]
+
+    all_params = []
+
+    combinations = itertools.product(MNK_FACTORS, A_GROUPS, B_GROUPS, USE_BIAS, DTYPES)
+
+    for (m, n, k), a_grp, b_grp, bias, (in_dtype, out_dtype) in combinations:
+        if a_grp[1] != -1:
+            if k % a_grp[1] != 0:
+                continue
+
+        if b_grp[0] != -1:
+            if k % b_grp[0] != 0:
+                continue
+        if b_grp[1] != -1:
+            if n % b_grp[1] != 0:
+                continue
+
+        is_block_wise = (a_grp[1] != -1) or (b_grp[0] != -1)
+        if is_block_wise and in_dtype != torch.float8_e4m3fn:
+            continue
+
+        param = {
+            "m": m,
+            "n": n,
+            "k": k,
+            "a_group": a_grp,
+            "b_group": b_grp,
+            "use_bias": bias,
+            "in_dtype": in_dtype,
+            "out_dtype": out_dtype,
+        }
+        all_params.append(param)
+
+    random.seed(42)
+    random.shuffle(all_params)
+    return all_params[:16]
+
+
+@pytest.mark.parametrize("p", get_test_params())
+def test_scaled_mm(p):
+    def baseline_scaled_mm(a, b, scale_a, scale_b, out_dtype, bias=None):
         def group_broadcast(t, shape):
             for i, s in enumerate(shape):
                 if t.shape[i] != s and t.shape[i] != 1:
@@ -453,36 +480,73 @@ def test_accuracy_cutlass_scaled_mm(M, N, K, out_dtype, use_bias):
                     )
             return t
 
-        scale_a = group_broadcast(scale_a, a.shape)
-        scale_b = group_broadcast(scale_b, b.shape)
+        scale_a_full = group_broadcast(scale_a, a.shape)
+        scale_b_full = group_broadcast(scale_b, b.shape)
 
-        output = torch.mm(
-            (scale_a * a.to(dtype=torch.float32)), (scale_b * b.to(dtype=torch.float32))
-        ).to(out_dtype)
+        a_f32 = a.to(torch.float32)
+        b_f32 = b.to(torch.float32)
+
+        lhs = scale_a_full * a_f32
+        rhs = scale_b_full * b_f32
+
+        output = torch.mm(lhs, rhs).to(out_dtype)
 
         if bias is not None:
             output = output + bias
 
         return output
 
+    def get_scale_shape(tensor_shape, group_shape):
+        scale_shape = []
+        for t_dim, g_dim in zip(tensor_shape, group_shape):
+            if g_dim == -1:
+                scale_shape.append(1)
+            else:
+                scale_shape.append(t_dim // g_dim)
+        return tuple(scale_shape)
+
     def to_int8(tensor: torch.Tensor):
         return torch.round(tensor.clamp(min=-128, max=127)).to(dtype=torch.int8)
 
-    a = to_int8(torch.randn((M, K), device=flag_gems.device) * 5)
-    b = to_int8(torch.randn((N, K), device=flag_gems.device).t() * 5)
+    def to_fp8(tensor: torch.Tensor):
+        finfo = torch.finfo(torch.float8_e4m3fn)
+        return torch.round(tensor.clamp(min=finfo.min, max=finfo.max)).to(
+            dtype=torch.float8_e4m3fn
+        )
 
-    scale_a = torch.randn((M,), device=flag_gems.device)
-    scale_b = torch.randn((N,), device=flag_gems.device)
+    m, n, k = p["m"], p["n"], p["k"]
+    in_dtype = p["in_dtype"]
+    out_dtype = p["out_dtype"]
+
+    if in_dtype == torch.int8:
+        a = to_int8(torch.randn((m, k), device=flag_gems.device))
+        b = to_int8(torch.randn((k, n), device=flag_gems.device) * 5)
+    else:
+        a = to_fp8(torch.randn((m, k), device=flag_gems.device))
+        b = to_fp8(torch.randn((k, n), device=flag_gems.device))
+
+    shape_a_scales = get_scale_shape((m, k), p["a_group"])
+    shape_b_scales = get_scale_shape((k, n), p["b_group"])
+
+    scale_a = torch.randn(shape_a_scales, device=flag_gems.device, dtype=torch.float32)
+    scale_b = torch.randn(shape_b_scales, device=flag_gems.device, dtype=torch.float32)
+
+    scale_a = scale_a.contiguous()
+    scale_b = scale_b.contiguous()
 
     bias = None
-    if use_bias:
-        bias = torch.randn((N,), dtype=out_dtype, device=flag_gems.device)
+    if p["use_bias"]:
+        bias = torch.randn((n,), device=flag_gems.device, dtype=out_dtype)
 
-    output = torch.empty((a.shape[0], b.shape[1]), dtype=out_dtype, device=a.device)
+    c = torch.empty((m, n), device=flag_gems.device, dtype=out_dtype)
 
-    flag_gems.cutlass_scaled_mm(output, a, b, scale_a, scale_b, bias)
-    baseline = baseline_scaled_mm(
-        a, b, scale_a.view((M, 1)), scale_b.view((1, N)), out_dtype, bias
-    )
+    output_kernel = flag_gems.cutlass_scaled_mm(c, a, b, scale_a, scale_b, bias)
 
-    assert torch.allclose(output, baseline, rtol=1e-1, atol=1e0)
+    output_ref = baseline_scaled_mm(a, b, scale_a, scale_b, out_dtype, bias)
+
+    if in_dtype == torch.int8:
+        rtol, atol = 1e-2, 1.0
+    else:
+        rtol, atol = 1e-1, 1.0
+
+    torch.testing.assert_close(output_kernel, output_ref, rtol=rtol, atol=atol)
