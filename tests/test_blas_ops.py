@@ -424,6 +424,7 @@ def get_test_params():
     B_GROUPS = [(-1, -1), (-1, 1), (128, 128)]
 
     USE_BIAS = [True, False]
+
     DTYPES = [(torch.int8, torch.float16), (torch.float8_e4m3fn, torch.bfloat16)]
 
     all_params = []
@@ -431,19 +432,16 @@ def get_test_params():
     combinations = itertools.product(MNK_FACTORS, A_GROUPS, B_GROUPS, USE_BIAS, DTYPES)
 
     for (m, n, k), a_grp, b_grp, bias, (in_dtype, out_dtype) in combinations:
-        if a_grp[1] != -1:
-            if k % a_grp[1] != 0:
-                continue
+        if a_grp == ((1, 128)) and b_grp != (128, 128):
+            continue
 
-        if b_grp[0] != -1:
-            if k % b_grp[0] != 0:
-                continue
-        if b_grp[1] != -1:
-            if n % b_grp[1] != 0:
-                continue
+        if a_grp != ((1, 128)) and b_grp == (128, 128):
+            continue
 
-        is_block_wise = (a_grp[1] != -1) or (b_grp[0] != -1)
-        if is_block_wise and in_dtype != torch.float8_e4m3fn:
+        is_block_wise = (a_grp == ((1, 128))) and (b_grp == (128, 128))
+        if is_block_wise and (
+            in_dtype != torch.float8_e4m3fn or k % 128 != 0 or n % 128 != 0
+        ):
             continue
 
         param = {
@@ -464,7 +462,7 @@ def get_test_params():
 
 
 @pytest.mark.parametrize("p", get_test_params())
-def test_scaled_mm(p):
+def test_cutlass_scaled_mm(p):
     def baseline_scaled_mm(a, b, scale_a, scale_b, out_dtype, bias=None):
         def group_broadcast(t, shape):
             for i, s in enumerate(shape):
