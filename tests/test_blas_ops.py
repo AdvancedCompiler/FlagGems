@@ -424,10 +424,7 @@ def get_test_params():
     B_GROUPS = [(-1, -1), (-1, 1), (128, 128)]
 
     USE_BIAS = [True, False]
-    DTYPES = [
-        (torch.int8, torch.float16),
-        # (torch.float8_e4m3fn, torch.bfloat16)
-    ]
+    DTYPES = [(torch.int8, torch.float16), (torch.float8_e4m3fn, torch.bfloat16)]
 
     all_params = []
 
