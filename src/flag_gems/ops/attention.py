@@ -1103,8 +1103,9 @@ def flash_attention_forward(
     original_head_dim = HEAD_DIM_K
     supported_head_dims = (16, 32, 64, 96, 128, 192, 256)
     if HEAD_DIM_K not in supported_head_dims:
-        for d in (16, 32, 64, 96, 128, 192, 256):
-            if d >= 80:
+        padded_head_dim = None
+        for d in supported_head_dims:
+            if d >= HEAD_DIM_K:
                 padded_head_dim = d
                 break
         assert (
