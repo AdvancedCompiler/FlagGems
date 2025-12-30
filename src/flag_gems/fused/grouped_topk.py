@@ -80,7 +80,6 @@ def group_idx_and_topk_triton(
     topk,
     num_experts,
     num_experts_per_group,
-    renormalize: tl.constexpr,
     routed_scaling_factor,
     scoring_func: tl.constexpr,
     stride_scores_token,
@@ -92,6 +91,7 @@ def group_idx_and_topk_triton(
     BLOCK_GROUP: tl.constexpr,
     BLOCK_EXPERT: tl.constexpr,
     INPUT_DTYPE: tl.constexpr,
+    renormalize: tl.constexpr,
 ):
     pid = tl.program_id(0)
     if pid >= num_tokens:

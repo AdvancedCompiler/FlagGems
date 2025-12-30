@@ -277,37 +277,25 @@ def custom_moe_align_block_size(
 
 def custom_moe_grouped_topk(
     gating_output: torch.Tensor,
-    num_experts: int,
     n_group: int,
     topk_group: int,
     topk: int,
-    renormalize: bool = True,
-    routed_scaling_factor: float = 1.0,
-    bias: Optional[torch.Tensor] = None,
+    renormalize: bool,
+    routed_scaling_factor: float,
+    bias: torch.Tensor,
+    scoring_func: int = 0,
 ):
     from flag_gems.fused import grouped_topk
-
-    if bias is None:
-        bias = torch.zeros(
-            num_experts, device=gating_output.device, dtype=gating_output.dtype
-        )
-    else:
-        if not isinstance(bias, torch.Tensor):
-            bias = torch.tensor(
-                bias, device=gating_output.device, dtype=gating_output.dtype
-            )
-
-        bias = bias.to(device=gating_output.device, dtype=gating_output.dtype)
 
     return grouped_topk(
         scores=gating_output,
         n_group=n_group,
         topk_group=topk_group,
         topk=topk,
-        renormalize=bool(renormalize),
+        renormalize=renormalize,
         routed_scaling_factor=routed_scaling_factor,
         bias=bias,
-        scoring_func=0,
+        scoring_func=scoring_func,
     )
 
 
