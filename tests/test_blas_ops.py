@@ -1,5 +1,7 @@
 import os
 import random
+from math import ceil
+from typing import Optional
 
 import numpy as np
 import pytest
@@ -406,65 +408,116 @@ def test_accuracy_addr(M, N, dtype):
     gems_assert_close(res_out, ref_out, dtype, equal_nan=True)
 
 
-def get_test_params():
-    import itertools
+class CutlassScaledMMTestKit:
+    SM_VERSION_NUM = None
 
-    MNK_FACTORS = [
-        (1, 256, 128),
-        (16, 256, 496),
-        (32, 1024, 1024),
-        (64, 2048, 496),
-        (128, 128, 128),
-        (256, 4096, 4096),
-        (512, 256, 1024),
-    ]
+    @staticmethod
+    def get_sm_version_num():
+        if torch.cuda.is_available():
+            major, minor = torch.cuda.get_device_capability()
+            return major * 10 + minor
 
-    A_GROUPS = [(-1, -1), (1, -1), (1, 128)]
+    @staticmethod
+    def to_int8(tensor: torch.Tensor):
+        return torch.round(tensor.clamp(min=-128, max=127)).to(dtype=torch.int8)
 
-    B_GROUPS = [(-1, -1), (-1, 1), (128, 128)]
+    @staticmethod
+    def to_fp8(tensor: torch.Tensor):
+        finfo = torch.finfo(torch.float8_e4m3fn)
+        return torch.round(tensor.clamp(min=finfo.min, max=finfo.max)).to(
+            dtype=torch.float8_e4m3fn
+        )
 
-    USE_BIAS = [True, False]
+    @staticmethod
+    def get_test_params():
+        from itertools import product
 
-    DTYPES = [(torch.int8, torch.float16), (torch.float8_e4m3fn, torch.bfloat16)]
+        CutlassScaledMMTestKit.SM_VERSION_NUM = (
+            CutlassScaledMMTestKit.get_sm_version_num()
+        )
 
-    all_params = []
+        MNK_FACTORS = [
+            (1, 256, 128),
+            (1, 16384, 1024),
+            (1, 24576, 496),
+            (16, 256, 496),
+            (16, 16384, 128),
+            (16, 24576, 4096),
+            (32, 8192, 4096),
+            (32, 16384, 4096),
+            (33, 1024, 1024),
+            (33, 8192, 128),
+            (64, 2048, 496),
+            (64, 16384, 1024),
+            (100, 8192, 496),
+            (128, 32768, 4096),
+            (256, 4096, 4096),
+            (512, 256, 1024),
+            (512, 8192, 4096),
+            (512, 16384, 128),
+            (512, 24576, 128),
+        ]
 
-    combinations = itertools.product(MNK_FACTORS, A_GROUPS, B_GROUPS, USE_BIAS, DTYPES)
+        A_SCALE_MODES = ["pertensor", "pertoken", "block_wise"]
+        B_SCALE_MODES = ["pertensor", "pertoken", "block_wise"]
+        USE_BIAS = [True, False]
+        DTYPES = [(torch.int8, torch.float16)]
 
-    for (m, n, k), a_grp, b_grp, bias, (in_dtype, out_dtype) in combinations:
-        if a_grp == ((1, 128)) and b_grp != (128, 128):
-            continue
+        combinations = product(
+            MNK_FACTORS, A_SCALE_MODES, B_SCALE_MODES, USE_BIAS, DTYPES
+        )
+        all_params = []
 
-        if a_grp != ((1, 128)) and b_grp == (128, 128):
-            continue
+        for (
+            (M, N, K),
+            a_scale_mode,
+            b_scale_mode,
+            bias,
+            (in_dtype, out_dtype),
+        ) in combinations:
+            if (
+                CutlassScaledMMTestKit.SM_VERSION_NUM < 89
+                and in_dtype == torch.float8_e4m3fn
+            ):
+                continue
 
-        is_block_wise = (a_grp == ((1, 128))) and (b_grp == (128, 128))
-        if is_block_wise and (
-            in_dtype != torch.float8_e4m3fn or k % 128 != 0 or n % 128 != 0
-        ):
-            continue
+            is_pertensor_or_pertoken = a_scale_mode in [
+                "pertensor",
+                "pertoken",
+            ] and b_scale_mode in ["pertensor", "pertoken"]
+            is_block_wise = (
+                a_scale_mode == "block_wise" and b_scale_mode == "block_wise"
+            )
 
-        param = {
-            "m": m,
-            "n": n,
-            "k": k,
-            "a_group": a_grp,
-            "b_group": b_grp,
-            "use_bias": bias,
-            "in_dtype": in_dtype,
-            "out_dtype": out_dtype,
-        }
-        all_params.append(param)
+            if not (is_pertensor_or_pertoken or is_block_wise):
+                continue
 
-    random.seed(42)
-    random.shuffle(all_params)
-    return all_params[:16]
+            param = {
+                "M": M,
+                "N": N,
+                "K": K,
+                "a_scale_mode": a_scale_mode,
+                "b_scale_mode": b_scale_mode,
+                "use_bias": bias,
+                "in_dtype": in_dtype,
+                "out_dtype": out_dtype,
+            }
+            all_params.append(param)
 
+        random.seed(42)
+        random.shuffle(all_params)
+        return all_params[:16]
 
-@pytest.mark.parametrize("p", get_test_params())
-def test_cutlass_scaled_mm(p):
-    def baseline_scaled_mm(a, b, scale_a, scale_b, out_dtype, bias=None):
-        def group_broadcast(t, shape):
+    @staticmethod
+    def baseline_scaled_mm(
+        a: torch.Tensor,
+        b: torch.Tensor,
+        scale_a: torch.Tensor,
+        scale_b: torch.Tensor,
+        out_dtype: torch.dtype,
+        bias: Optional[torch.Tensor] = None,
+    ):
+        def group_broadcast(t: torch.Tensor, shape):
             for i, s in enumerate(shape):
                 if t.shape[i] != s and t.shape[i] != 1:
                     assert s % t.shape[i] == 0
@@ -491,37 +544,44 @@ def test_cutlass_scaled_mm(p):
 
         return output
 
-    def get_scale_shape(tensor_shape, group_shape):
-        scale_shape = []
-        for t_dim, g_dim in zip(tensor_shape, group_shape):
-            if g_dim == -1:
-                scale_shape.append(1)
-            else:
-                scale_shape.append(t_dim // g_dim)
-        return tuple(scale_shape)
 
-    def to_int8(tensor: torch.Tensor):
-        return torch.round(tensor.clamp(min=-128, max=127)).to(dtype=torch.int8)
+@pytest.mark.skipif(
+    flag_gems.device != "cuda", reason="only nvidia devices are supported"
+)
+@pytest.mark.parametrize("p", CutlassScaledMMTestKit.get_test_params())
+def test_cutlass_scaled_mm(p):
+    kit = CutlassScaledMMTestKit
 
-    def to_fp8(tensor: torch.Tensor):
-        finfo = torch.finfo(torch.float8_e4m3fn)
-        return torch.round(tensor.clamp(min=finfo.min, max=finfo.max)).to(
-            dtype=torch.float8_e4m3fn
-        )
-
-    m, n, k = p["m"], p["n"], p["k"]
+    M, N, K = p["M"], p["N"], p["K"]
     in_dtype = p["in_dtype"]
     out_dtype = p["out_dtype"]
+    a_scale_mode = p["a_scale_mode"]
+    b_scale_mode = p["b_scale_mode"]
 
     if in_dtype == torch.int8:
-        a = to_int8(torch.randn((m, k), device=flag_gems.device))
-        b = to_int8(torch.randn((k, n), device=flag_gems.device) * 5)
+        a = kit.to_int8(torch.randn((M, K), device=flag_gems.device))
+        b = kit.to_int8(
+            torch.randn((K, N), device=flag_gems.device).t().contiguous().t() * 5
+        )
     else:
-        a = to_fp8(torch.randn((m, k), device=flag_gems.device))
-        b = to_fp8(torch.randn((k, n), device=flag_gems.device))
+        a = kit.to_fp8(torch.randn((M, K), device=flag_gems.device))
+        b = kit.to_fp8(
+            torch.randn((K, N), device=flag_gems.device).t().contiguous().t()
+        )
 
-    shape_a_scales = get_scale_shape((m, k), p["a_group"])
-    shape_b_scales = get_scale_shape((k, n), p["b_group"])
+    if a_scale_mode == "pertensor":
+        shape_a_scales = (1, 1)
+    elif a_scale_mode == "pertoken":
+        shape_a_scales = (M, 1)
+    else:
+        shape_a_scales = (M, ceil(K / 128))
+
+    if b_scale_mode == "pertensor":
+        shape_b_scales = (1, 1)
+    elif b_scale_mode == "pertoken":
+        shape_b_scales = (1, N)
+    else:
+        shape_b_scales = (K, ceil(N / 128))
 
     scale_a = torch.randn(shape_a_scales, device=flag_gems.device, dtype=torch.float32)
     scale_b = torch.randn(shape_b_scales, device=flag_gems.device, dtype=torch.float32)
@@ -531,13 +591,13 @@ def test_cutlass_scaled_mm(p):
 
     bias = None
     if p["use_bias"]:
-        bias = torch.randn((n,), device=flag_gems.device, dtype=out_dtype)
+        bias = torch.randn((N,), device=flag_gems.device, dtype=out_dtype)
 
-    c = torch.empty((m, n), device=flag_gems.device, dtype=out_dtype)
+    c = torch.empty((M, N), device=flag_gems.device, dtype=out_dtype)
 
     output_kernel = flag_gems.cutlass_scaled_mm(c, a, b, scale_a, scale_b, bias)
 
-    output_ref = baseline_scaled_mm(a, b, scale_a, scale_b, out_dtype, bias)
+    output_ref = kit.baseline_scaled_mm(a, b, scale_a, scale_b, out_dtype, bias)
 
     if in_dtype == torch.int8:
         rtol, atol = 1e-2, 1.0
