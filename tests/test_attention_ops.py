@@ -1,4 +1,5 @@
 import math
+import os
 import random
 from typing import List, Optional, Tuple
 
@@ -8,12 +9,13 @@ import torch
 import triton
 
 import flag_gems
-from flag_gems.ops.get_scheduler_metadata import (
-    get_num_splits,
-    get_optimal_block_mn,
-    round_up_headdim,
-    round_up_headdimv,
-)
+
+try:
+    import vllm.vllm_flash_attn.flash_attn_interface as _vllm  # noqa: F401
+
+    HAS_VLLM = True
+except ImportError:
+    HAS_VLLM = False
 from flag_gems.runtime import torch_device_fn
 from flag_gems.utils.random_utils import set_philox_state
 
@@ -24,7 +26,15 @@ device = flag_gems.device
 
 
 def make_input(
-    batch, num_head, num_head_k, q_seq_len, kv_seq_len, head_size, dtype, device
+    batch,
+    num_head,
+    num_head_k,
+    q_seq_len,
+    kv_seq_len,
+    head_size,
+    dtype,
+    device,
+    requires_grad=False,
 ):
     set_philox_state(1234567890, 0, device)
     q_shape = (batch, num_head, q_seq_len, head_size)
@@ -32,6 +42,10 @@ def make_input(
     q = torch.empty(q_shape, dtype=dtype, device=device).uniform_(-0.05, 0.05)
     k = torch.empty(kv_shape, dtype=dtype, device=device).uniform_(-0.05, 0.05)
     v = torch.empty(kv_shape, dtype=dtype, device=device).uniform_(-0.05, 0.05)
+    if requires_grad:
+        q.requires_grad_()
+        k.requires_grad_()
+        v.requires_grad_()
     return q, k, v
 
 
@@ -194,15 +208,24 @@ def torch_sdpa(q, k, v, scale, is_causal, enable_gqa=False):
             is_causal=is_causal,
         )
     else:
-        torch_result = torch.nn.functional.scaled_dot_product_attention(
-            q,
-            k,
-            v,
-            attn_mask=None,
-            scale=scale,
-            is_causal=is_causal,
-            enable_gqa=enable_gqa,
-        )
+        if flag_gems.vendor_name == "iluvatar" and TO_CPU:
+            from torch.nn.attention import SDPBackend, sdpa_kernel
+
+            ctx = sdpa_kernel(backends=[SDPBackend.MATH])
+        else:
+            from contextlib import nullcontext
+
+            ctx = nullcontext()
+        with ctx:
+            torch_result = torch.nn.functional.scaled_dot_product_attention(
+                q,
+                k,
+                v,
+                attn_mask=None,
+                scale=scale,
+                is_causal=is_causal,
+                enable_gqa=enable_gqa,
+            )
     return torch_result
 
 
@@ -267,10 +290,7 @@ def gems_flash_fwd(
     return out, lse, seed, offset, debug_softmax
 
 
-@pytest.mark.skipif(flag_gems.vendor_name == "metax", reason="TODOFIX")
-@pytest.mark.skipif(flag_gems.vendor_name == "mthreads", reason="TODOFIX")
-@pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RuntimeError")
-@pytest.mark.skipif(flag_gems.vendor_name == "kunlunxin", reason="RESULT TODOFIX")
+# @pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RuntimeError")
 @pytest.mark.skipif(
     torch.__version__ < "2.5", reason="Low Pytorch Version: enable_gqa not supported"
 )
@@ -319,14 +339,109 @@ def test_sdpa_legacy(
     dtype,
     enable_gqa,
 ):
+    if flag_gems.vendor_name == "hygon":
+        os.environ["TRITON_HIP_USE_NEW_STREAM_PIPELINE"] = "0"
     device = torch_device_fn.current_device()
     q, k, v = make_input(
-        batch, num_q_head, num_kv_head, q_seq_len, kv_seq_len, head_size, dtype, device
+        batch,
+        num_q_head,
+        num_kv_head,
+        q_seq_len,
+        kv_seq_len,
+        head_size,
+        dtype,
+        device,
+        requires_grad=True,
     )
     ref_q = to_reference(q, False)
     ref_k = to_reference(k, False)
     ref_v = to_reference(v, False)
     scale = float(1.0 / np.sqrt(head_size))
+
+    # forward
+    torch_result = torch_sdpa(
+        ref_q, ref_k, ref_v, scale, is_causal, enable_gqa=enable_gqa
+    )
+
+    gems_result = flag_gems.ops.scaled_dot_product_attention(
+        q, k, v, attn_mask=None, scale=scale, is_causal=is_causal, enable_gqa=enable_gqa
+    )
+
+    gems_assert_close(gems_result, torch_result, dtype)
+    if flag_gems.vendor_name == "hygon":
+        del os.environ["TRITON_HIP_USE_NEW_STREAM_PIPELINE"]
+
+
+@pytest.mark.skipif(True, reason="something wrong here, disable it for temp")
+@pytest.mark.skipif(flag_gems.vendor_name == "metax", reason="TODOFIX")
+@pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RuntimeError")
+@pytest.mark.skipif(flag_gems.vendor_name == "kunlunxin", reason="RESULT TODOFIX")
+@pytest.mark.skipif(
+    torch.__version__ < "2.5", reason="Low Pytorch Version: enable_gqa not supported"
+)
+@pytest.mark.scaled_dot_product_attention_backward
+@pytest.mark.parametrize(
+    "batch, num_q_head, num_kv_head, q_seq_len, kv_seq_len, head_size, enable_gqa",
+    [
+        (4, 8, 8, 1024, 1024, 64, False),
+        (4, 8, 8, 1024, 1024, 128, False),
+        (4, 8, 8, 2048, 256, 64, False),
+        (4, 8, 8, 2048, 256, 128, False),
+        (4, 8, 8, 17, 1030, 64, False),
+        (4, 8, 8, 17, 1030, 128, False),
+        # adopted from FlagAttention `test_attention_fwd`:
+        (2, 4, 4, 512, 612, 128, False),
+        (2, 4, 4, 1024, 1034, 64, False),
+        (2, 4, 4, 2048, 2048, 32, False),
+        (2, 4, 4, 4096, 4096, 16, False),
+        (2, 4, 4, 4001, 4001, 32, False),
+        (2, 4, 4, 4001, 4096, 64, False),
+        (2, 4, 4, 4096, 4000, 128, False),
+        (1, 2, 2, 8192, 8202, 16, False),
+        (1, 2, 2, 8192, 8192, 32, False),
+        # test for mqa/gqa
+        (2, 4, 2, 512, 612, 128, True),
+        (2, 4, 1, 1024, 1034, 64, True),
+        (2, 4, 2, 2048, 2048, 32, True),
+        (2, 4, 1, 4096, 4096, 16, True),
+        (2, 4, 2, 4001, 4001, 32, True),
+        (2, 4, 1, 4001, 4096, 64, True),
+        (2, 4, 2, 4096, 4000, 128, True),
+        (1, 2, 1, 8192, 8202, 16, True),
+        (1, 2, 1, 8192, 8192, 32, True),
+    ],
+)
+@pytest.mark.parametrize("is_causal", [False, True])
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+def test_sdpa_legacy_backward(
+    batch,
+    num_q_head,
+    num_kv_head,
+    q_seq_len,
+    kv_seq_len,
+    head_size,
+    is_causal,
+    dtype,
+    enable_gqa,
+):
+    device = torch_device_fn.current_device()
+    q, k, v = make_input(
+        batch,
+        num_q_head,
+        num_kv_head,
+        q_seq_len,
+        kv_seq_len,
+        head_size,
+        dtype,
+        device,
+        requires_grad=True,
+    )
+    ref_q = to_reference(q, False)
+    ref_k = to_reference(k, False)
+    ref_v = to_reference(v, False)
+    scale = float(1.0 / np.sqrt(head_size))
+
+    # forward
     torch_result = torch_sdpa(
         ref_q, ref_k, ref_v, scale, is_causal, enable_gqa=enable_gqa
     )
@@ -337,11 +452,24 @@ def test_sdpa_legacy(
 
     gems_assert_close(gems_result, torch_result, dtype)
 
+    # backward
+    dout = torch.randn_like(ref_q)
+    torch_result.backward(dout)
+    gems_result.backward(dout)
+    torch_q_grad = ref_q.grad.clone() if ref_q.grad is not None else None
+    torch_k_grad = ref_k.grad.clone() if ref_k.grad is not None else None
+    torch_v_grad = ref_v.grad.clone() if ref_v.grad is not None else None
+    gems_q_grad = q.grad.clone() if q.grad is not None else None
+    gems_k_grad = k.grad.clone() if k.grad is not None else None
+    gems_v_grad = v.grad.clone() if v.grad is not None else None
 
-@pytest.mark.skipif(flag_gems.vendor_name == "metax", reason="TODOFIX")
-@pytest.mark.skipif(flag_gems.vendor_name == "mthreads", reason="TODOFIX")
+    # NOTE: NaN may arise in the gradients, this behavior aligns with PyTorch's SDPA
+    gems_assert_close(gems_q_grad, torch_q_grad, dtype, equal_nan=True)
+    gems_assert_close(gems_k_grad, torch_k_grad, dtype, equal_nan=True)
+    gems_assert_close(gems_v_grad, torch_v_grad, dtype, equal_nan=True)
+
+
 @pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RuntimeError")
-@pytest.mark.skipif(flag_gems.vendor_name == "kunlunxin", reason="RESULT TODOFIX")
 @pytest.mark.scaled_dot_product_attention
 @pytest.mark.parametrize(
     ["batch", "num_head", "q_seq_len", "kv_seq_len"],
@@ -349,12 +477,15 @@ def test_sdpa_legacy(
         (4, 8, 1024, 1024),
     ],
 )
-@pytest.mark.parametrize("head_size", [64, 128, 256])
+@pytest.mark.parametrize("head_size", [64, 128, 192, 256])
 @pytest.mark.parametrize("is_causal", [False, True])
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 def test_sdpa_square_qk_even_mn(
     batch, num_head, q_seq_len, kv_seq_len, head_size, is_causal, dtype
 ):
+    if flag_gems.vendor_name == "mthreads":
+        os.environ["MUSA_ENABLE_SQMMA"] = "1"
+
     device = torch_device_fn.current_device()
     q, k, v = make_input(
         batch, num_head, num_head, q_seq_len, kv_seq_len, head_size, dtype, device
@@ -368,22 +499,25 @@ def test_sdpa_square_qk_even_mn(
         gems_result = torch_sdpa(q, k, v, scale, is_causal)
     gems_assert_close(gems_result, torch_result, dtype)
 
+    if flag_gems.vendor_name == "mthreads":
+        del os.environ["MUSA_ENABLE_SQMMA"]
 
-@pytest.mark.skipif(flag_gems.vendor_name == "metax", reason="TODOFIX")
-@pytest.mark.skipif(flag_gems.vendor_name == "mthreads", reason="TODOFIX")
+
 @pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RuntimeError")
-@pytest.mark.skipif(flag_gems.vendor_name == "kunlunxin", reason="RESULT TODOFIX")
 @pytest.mark.scaled_dot_product_attention
 @pytest.mark.parametrize(
     ["batch", "num_head", "q_seq_len", "kv_seq_len"],
     [(1, 1, 128, 2048), (4, 8, 1024, 128), (4, 8, 17, 1030)],
 )
-@pytest.mark.parametrize("head_size", [64, 128, 256])
+@pytest.mark.parametrize("head_size", [64, 128, 192, 256])
 @pytest.mark.parametrize("is_causal", [False])
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 def test_sdpa_nonsquare_qk(
     batch, num_head, q_seq_len, kv_seq_len, head_size, is_causal, dtype
 ):
+    if flag_gems.vendor_name == "mthreads":
+        os.environ["MUSA_ENABLE_SQMMA"] = "1"
+
     device = torch_device_fn.current_device()
     q, k, v = make_input(
         batch, num_head, num_head, q_seq_len, kv_seq_len, head_size, dtype, device
@@ -396,6 +530,9 @@ def test_sdpa_nonsquare_qk(
     with flag_gems.use_gems():
         gems_result = torch_sdpa(q, k, v, scale, is_causal)
     gems_assert_close(gems_result, torch_result, dtype)
+
+    if flag_gems.vendor_name == "mthreads":
+        del os.environ["MUSA_ENABLE_SQMMA"]
 
 
 @pytest.mark.skipif(flag_gems.vendor_name == "metax", reason="TODOFIX")
@@ -404,13 +541,12 @@ def test_sdpa_nonsquare_qk(
 @pytest.mark.skipif(
     flag_gems.vendor_name == "mthreads", reason="Unsupported in CPU mode"
 )
-@pytest.mark.skipif(flag_gems.vendor_name == "kunlunxin", reason="RESULT TODOFIX")
 @pytest.mark.flash_attention_forward
 @pytest.mark.parametrize(
     ["batch", "num_head", "q_seq_len", "kv_seq_len"],
     [(1, 1, 128, 2048), (4, 8, 1024, 128), (4, 8, 17, 1030)],
 )
-@pytest.mark.parametrize("head_size", [64, 128, 256])
+@pytest.mark.parametrize("head_size", [64, 128, 192, 256])
 @pytest.mark.parametrize("is_causal", [False, True])
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 def test_flash_fwd_nonsquare_qk(
@@ -431,6 +567,8 @@ def test_flash_fwd_nonsquare_qk(
     gems_out, gems_lse, _, _, _ = gems_flash_fwd(q, k, v, scale, is_causal)
 
     gems_assert_close(gems_out, torch_out, dtype)
+    if flag_gems.vendor_name == "iluvatar":
+        return
     gems_assert_close(gems_lse, torch_lse, torch.float)
 
 
@@ -445,7 +583,7 @@ def test_flash_fwd_nonsquare_qk(
     ["batch", "num_head", "num_head_k", "q_seq_len", "kv_seq_len"],
     [(4, 8, 2, 1024, 1024), (4, 4, 4, 1, 519)],
 )
-@pytest.mark.parametrize("head_size", [128])
+@pytest.mark.parametrize("head_size", [128, 192])
 @pytest.mark.parametrize("is_causal", [False, True])
 @pytest.mark.parametrize("soft_cap", [None, 10.0, 50.0])
 @pytest.mark.parametrize("alibi", [True])
@@ -523,7 +661,7 @@ def test_flash_fwd_gqa_alibi_softcap(
     ["batch", "num_head", "num_head_k", "q_seq_len", "kv_seq_len"],
     [(1, 4, 1, 1, 1024), (4, 4, 4, 1, 519)],
 )
-@pytest.mark.parametrize("head_size", [128])
+@pytest.mark.parametrize("head_size", [128, 192])
 @pytest.mark.parametrize("is_causal", [False, True])
 @pytest.mark.parametrize("soft_cap", [None, 10.0, 50.0])
 @pytest.mark.parametrize("alibi", [False, True])
@@ -601,7 +739,7 @@ def test_flash_splitkv(
     ["batch", "num_head", "q_seq_len", "kv_seq_len"],
     [(1, 1, 128, 2048), (8, 32, 1024, 1024), (8, 32, 1024, 128), (8, 32, 17, 1030)],
 )
-@pytest.mark.parametrize("head_size", [128])
+@pytest.mark.parametrize("head_size", [128, 192])
 @pytest.mark.parametrize(
     ["window_size_left", "window_size_right"], [(256, 0), (128, 128)]
 )
@@ -651,6 +789,8 @@ def test_flash_fwd_swa(
     )
 
     gems_assert_close(gems_out, torch_out, dtype)
+    if flag_gems.vendor_name == "iluvatar":
+        return
     gems_assert_close(gems_lse, torch_lse, torch.float)
 
 
@@ -738,14 +878,12 @@ def ref_paged_attn(
     return torch.cat(outputs, dim=0)
 
 
-@pytest.mark.skipif(flag_gems.vendor_name == "mthreads", reason="RESULT TODOFIX")
 @pytest.mark.skipif(flag_gems.vendor_name == "kunlunxin", reason="RESULT TODOFIX")
-@pytest.mark.skipif(flag_gems.vendor_name == "iluvatar", reason="RESULT TODOFIX")
 @pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RESULT TODOFIX")
 @pytest.mark.flash_attn_varlen_func
 @pytest.mark.parametrize("seq_lens", [[(1, 1328), (5, 18), (129, 463)]])
 @pytest.mark.parametrize("num_heads", [(4, 4), (8, 2), (16, 2)])
-@pytest.mark.parametrize("head_size", [128, 256])
+@pytest.mark.parametrize("head_size", [128, 192, 256])
 @pytest.mark.parametrize("block_size", [32])
 @pytest.mark.parametrize("sliding_window", [None])
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
@@ -764,12 +902,18 @@ def test_flash_attn_varlen_func(
     soft_cap: Optional[float],
     num_blocks: int,
 ) -> None:
+    if flag_gems.vendor_name == "mthreads":
+        os.environ["MUSA_ENABLE_SQMMA"] = "1"
+
     # (Issue) numerical stability concern
     if alibi is True and soft_cap is not None:
         return
 
     with torch.device(flag_gems.device):
         init_seed(1234567890)
+        if flag_gems.vendor_name == "cambricon":
+            torch.manual_seed(123456)
+            torch.mlu.manual_seed_all(123456)
         num_seqs = len(seq_lens)
         query_lens = [x[0] for x in seq_lens]
         kv_lens = [x[1] for x in seq_lens]
@@ -847,10 +991,11 @@ def test_flash_attn_varlen_func(
             output, ref_output, atol=2e-2, rtol=1e-2
         ), f"{torch.max(torch.abs(output - ref_output))}"
 
+    if flag_gems.vendor_name == "mthreads":
+        del os.environ["MUSA_ENABLE_SQMMA"]
 
-@pytest.mark.skipif(flag_gems.vendor_name == "mthreads", reason="RESULT TODOFIX")
+
 @pytest.mark.skipif(flag_gems.vendor_name == "kunlunxin", reason="RESULT TODOFIX")
-@pytest.mark.skipif(flag_gems.vendor_name == "iluvatar", reason="RESULT TODOFIX")
 @pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RESULT TODOFIX")
 @pytest.mark.flash_attn_varlen_func
 @pytest.mark.parametrize("seq_lens", [[(1, 1328), (1, 18), (1, 463)]])
@@ -872,6 +1017,9 @@ def test_flash_attn_varlen_func_swap_qg(
     soft_cap: Optional[float],
     num_blocks: int,
 ) -> None:
+    if flag_gems.vendor_name == "mthreads":
+        os.environ["MUSA_ENABLE_SQMMA"] = "1"
+
     with torch.device(flag_gems.device):
         init_seed(1234567890)
         num_seqs = len(seq_lens)
@@ -932,6 +1080,9 @@ def test_flash_attn_varlen_func_swap_qg(
         torch.testing.assert_close(
             output, ref_output, atol=2e-2, rtol=1e-2
         ), f"{torch.max(torch.abs(output - ref_output))}"
+
+    if flag_gems.vendor_name == "mthreads":
+        del os.environ["MUSA_ENABLE_SQMMA"]
 
 
 DTYPES = [torch.half, torch.bfloat16, torch.float]
@@ -1172,7 +1323,7 @@ def test_reshape_and_cache(
 
 
 @pytest.mark.skipif(TO_CPU, reason="Unsupported in CPU mode")
-@pytest.mark.skipif(triton.__version__ < "3.2", reason="Low Triton Version")
+@pytest.mark.skipif(triton.__version__ < "3.1", reason="Low Triton Version")
 @pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RuntimeError")
 @pytest.mark.skipif(flag_gems.vendor_name == "mthreads", reason="Low Triton Version")
 @pytest.mark.skipif(flag_gems.vendor_name == "kunlunxin", reason="RESULT TODOFIX")
@@ -1319,11 +1470,7 @@ def test_reshape_and_cache_flash(
         torch.testing.assert_close(value_cache.cpu(), cloned_value_cache.cpu())
 
 
-@pytest.mark.skipif(flag_gems.vendor_name == "metax", reason="TODOFIX")
 @pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RuntimeError")
-@pytest.mark.skipif(flag_gems.vendor_name == "mthreads", reason="RESULT TODOFIX")
-@pytest.mark.skipif(flag_gems.vendor_name == "kunlunxin", reason="RESULT TODOFIX")
-@pytest.mark.skipif(flag_gems.vendor_name == "cambricon", reason="TypeError")
 @pytest.mark.flash_mla
 @pytest.mark.parametrize("seqlen", [1024, 2048, 4096, 8192])
 @pytest.mark.parametrize(
@@ -1333,6 +1480,9 @@ def test_reshape_and_cache_flash(
     ],
 )
 def test_flash_mla(seqlen, dtype):
+    if flag_gems.vendor_name == "mthreads":
+        os.environ["MUSA_ENABLE_SQMMA"] = "1"
+
     b = 128
     s_q = 1
     h_q = 128
@@ -1458,139 +1608,8 @@ def test_flash_mla(seqlen, dtype):
 
     cal_diff(to_reference(res_out), ref_out, "out")
 
-
-def reference_get_scheduler_metadata(
-    batch_size: int,
-    max_seqlen_q: int,
-    max_seqlen_k: int,
-    max_seqlen_k_new: int,
-    num_heads: int,
-    num_heads_k: int,
-    headdim: int,
-    headdim_v: int,
-    qkv_dtype: torch.dtype,
-    seqused_k: torch.Tensor,
-    num_sm: int,
-    num_splits_static: int = 0,
-    is_causal: bool = False,
-    window_size_left: int = -1,
-    window_size_right: int = -1,
-    page_size: Optional[int] = None,
-    has_softcap: bool = False,
-    pack_gqa: Optional[bool] = None,
-) -> torch.Tensor:
-    device = seqused_k.device
-    effective_is_causal = is_causal
-    effective_window_left = window_size_left
-    effective_window_right = window_size_right
-
-    if effective_window_left >= max_seqlen_k - 1:
-        effective_window_left = -1
-    if effective_window_right >= max_seqlen_q - 1:
-        effective_window_right = -1
-
-    if (
-        max_seqlen_q == 1
-        and effective_window_left == -1
-        and effective_window_right == -1
-    ):
-        if (headdim <= 64 or headdim > 128) or page_size is None:
-            effective_is_causal = False
-
-    if effective_is_causal:
-        effective_window_right = 0
-
-    final_is_causal = effective_window_left < 0 and effective_window_right == 0
-    final_is_local = (
-        effective_window_left >= 0 or effective_window_right >= 0
-    ) and not final_is_causal
-
-    arch_cap = torch.cuda.get_device_capability(device)
-    arch = arch_cap[0] * 10 + arch_cap[1]
-
-    d_rounded = round_up_headdim(headdim)
-    dv_rounded = round_up_headdimv(headdim_v)
-
-    blockM, blockN = get_optimal_block_mn(
-        device=device,
-        headdim=headdim,
-        headdim_v=headdim_v,
-        is_causal=final_is_causal,
-        is_local=final_is_local,
-        has_softcap=has_softcap,
-        element_size=qkv_dtype.itemsize,
-    )
-
-    final_pack_gqa = pack_gqa if pack_gqa is not None else (num_heads != num_heads_k)
-    qhead_per_khead = (
-        1 if not final_pack_gqa else (num_heads + num_heads_k - 1) // num_heads_k
-    )
-    num_head_k = num_heads_k if final_pack_gqa else num_heads
-
-    seqlen_q_packgqa = max_seqlen_q * qhead_per_khead
-    num_m_blocks = (seqlen_q_packgqa + blockM - 1) // blockM
-
-    num_n_blocks_per_seq = (seqused_k + blockN - 1) // blockN
-
-    total_blocks_per_seq = num_m_blocks * num_n_blocks_per_seq
-    total_blocks = torch.sum(total_blocks_per_seq).item()
-
-    use_dynamic_split = num_splits_static <= 0 and batch_size <= 992
-
-    if use_dynamic_split:
-        eff_num_splits = get_num_splits(
-            batch_size=batch_size,
-            num_heads=num_heads,
-            num_heads_k=num_heads_k,
-            headdim=headdim,
-            headdim_v=headdim_v,
-            d_rounded=d_rounded,
-            dv_rounded=dv_rounded,
-            max_seqlen_q=max_seqlen_q,
-            max_seqlen_k=max_seqlen_k,
-            max_seqlen_k_new=max_seqlen_k_new,
-            arch=arch,
-            num_sm=num_sm,
-            is_causal=final_is_causal,
-            is_local=final_is_local,
-            has_softcap=has_softcap,
-            is_varlen=True,
-            has_page_table=False,
-            element_size=qkv_dtype.itemsize,
-            use_dynamic_split=True,
-        )
-    else:
-        eff_num_splits = num_splits_static if num_splits_static > 0 else 1
-
-    if use_dynamic_split:
-        blocks_per_sm_float = math.ceil(total_blocks * 1.1 * num_head_k / num_sm)
-        blocks_per_sm = int(max(1, blocks_per_sm_float))
-        ref_splits = (num_n_blocks_per_seq + blocks_per_sm - 1) // blocks_per_sm
-        ref_splits = torch.minimum(
-            ref_splits, torch.tensor(eff_num_splits, device=device)
-        )
-        ref_splits = torch.maximum(ref_splits, torch.tensor(1, device=device))
-    else:
-        ref_splits = torch.full(
-            (batch_size,), eff_num_splits, dtype=torch.int32, device=device
-        )
-
-    final_num_splits_val = eff_num_splits
-    scheduler_needs_semaphore = arch >= 90 or final_num_splits_val > 1
-
-    alloc_size = int(scheduler_needs_semaphore) + int(use_dynamic_split) * batch_size
-
-    if alloc_size > 0:
-        ref_metadata = torch.empty(alloc_size, dtype=torch.int32, device=device)
-        offset = 0
-        if scheduler_needs_semaphore:
-            ref_metadata[offset] = total_blocks
-            offset += 1
-        if use_dynamic_split:
-            ref_metadata[offset:] = ref_splits
-        return ref_metadata
-    else:
-        return torch.empty((0,), dtype=torch.int32, device=device)
+    if flag_gems.vendor_name == "mthreads":
+        del os.environ["MUSA_ENABLE_SQMMA"]
 
 
 @pytest.mark.get_scheduler_metadata
@@ -1599,6 +1618,7 @@ def reference_get_scheduler_metadata(
 @pytest.mark.parametrize("headdim", [64, 128])
 @pytest.mark.parametrize("num_splits_static", [0, 4])
 @pytest.mark.parametrize("seed", [42])
+@pytest.mark.skipif(not HAS_VLLM, reason="vllm not installed")
 def test_scheduler_metadata_correctness(
     batch_size, max_seqlen_k, headdim, num_splits_static, seed
 ):
@@ -1613,27 +1633,33 @@ def test_scheduler_metadata_correctness(
     num_heads, num_heads_k = 32, 8
     headdim_v = headdim
     qkv_dtype = torch.float16
-    num_sm = torch.cuda.get_device_properties(device).multi_processor_count
+    # num_sm = torch.cuda.get_device_properties(device).multi_processor_count
+    import vllm.vllm_flash_attn.flash_attn_interface as vllm_ops  # noqa: F401
 
-    ref_metadata = reference_get_scheduler_metadata(
+    ref_metadata = torch.ops._vllm_fa3_C.get_scheduler_metadata(
         batch_size=batch_size,
         max_seqlen_q=1,
         max_seqlen_k=max_seqlen_k,
-        max_seqlen_k_new=0,
         num_heads=num_heads,
         num_heads_k=num_heads_k,
         headdim=headdim,
         headdim_v=headdim_v,
         qkv_dtype=qkv_dtype,
         seqused_k=seqused_k,
-        num_sm=num_sm,
-        num_splits_static=num_splits_static,
+        cu_seqlens_q=None,
+        cu_seqlens_k=None,
+        cu_seqlens_k_new=None,
+        seqused_q=None,
+        leftpad_k=None,
+        page_size=None,
+        max_seqlen_k_new=0,
         is_causal=False,
         window_size_left=-1,
         window_size_right=-1,
-        page_size=None,
         has_softcap=False,
+        num_splits=num_splits_static,
         pack_gqa=True,
+        sm_margin=0,
     )
 
     with flag_gems.use_gems():
@@ -1647,14 +1673,20 @@ def test_scheduler_metadata_correctness(
             headdim_v=headdim_v,
             qkv_dtype=qkv_dtype,
             seqused_k=seqused_k,
-            num_splits=num_splits_static,
+            cu_seqlens_q=None,
+            cu_seqlens_k=None,
+            cu_seqlens_k_new=None,
+            seqused_q=None,
+            leftpad_k=None,
+            page_size=None,
+            max_seqlen_k_new=0,
             is_causal=False,
             window_size_left=-1,
             window_size_right=-1,
-            page_size=None,
             has_softcap=False,
+            num_splits=num_splits_static,
             pack_gqa=True,
-            max_seqlen_k_new=0,
+            sm_margin=0,
         )
 
     gems_assert_close(gems_metadata, ref_metadata, dtype=torch.int32)

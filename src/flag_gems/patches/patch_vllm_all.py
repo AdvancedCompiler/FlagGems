@@ -139,7 +139,7 @@ def custom_gems_flash_mla_forward(
     return o
 
 
-def custom_gems_flash_attention_impl_forwad(
+def custom_gems_flash_attention_impl_forward(
     self,
     layer: torch.nn.Module,
     query: torch.Tensor,
@@ -149,6 +149,8 @@ def custom_gems_flash_attention_impl_forwad(
     attn_metadata,  #: FlashAttentionMetadata,
     output: Optional[torch.Tensor] = None,
     output_scale: Optional[torch.Tensor] = None,
+    output_block_scale: Optional[torch.Tensor] = None,
+    **kwargs,
 ) -> torch.Tensor:
     from flag_gems import flash_attn_varlen_func, reshape_and_cache_flash
 
@@ -192,8 +194,11 @@ def custom_gems_flash_attention_impl_forwad(
         # query = query.reshape((num_tokens, num_heads, head_size))
 
     # Compute attention and update output up to `num_actual_tokens`.
-    use_local_attn = self.use_irope and attn_metadata.local_attn_metadata is not None
-
+    # use_local_attn = self.use_irope and attn_metadata.local_attn_metadata is not None
+    use_local_attn = (
+        getattr(self, "use_irope", False)
+        and getattr(attn_metadata, "local_attn_metadata", None) is not None
+    )
     if not attn_metadata.use_cascade or use_local_attn:
         if use_local_attn:
             assert attn_metadata.local_attn_metadata is not None
@@ -203,16 +208,16 @@ def custom_gems_flash_attention_impl_forwad(
             max_seqlen_q = local_metadata.local_max_query_len
             max_seqlen_k = local_metadata.local_max_seq_len
             block_table = local_metadata.local_block_table
-            # scheduler_metadata = local_metadata.local_scheduler_metadata
+            scheduler_metadata = local_metadata.local_scheduler_metadata
         else:
             cu_seqlens_q = attn_metadata.query_start_loc
             seqused_k = attn_metadata.seq_lens
             max_seqlen_q = attn_metadata.max_query_len
             max_seqlen_k = attn_metadata.max_seq_len
             block_table = attn_metadata.block_table
-            # scheduler_metadata = attn_metadata.scheduler_metadata
+            scheduler_metadata = attn_metadata.scheduler_metadata
 
-        # descale_shape = (cu_seqlens_q.shape[0] - 1, key.shape[1])
+        descale_shape = (cu_seqlens_q.shape[0] - 1, key.shape[1])
 
         flash_attn_varlen_func(
             q=query[:num_actual_tokens],
@@ -229,44 +234,21 @@ def custom_gems_flash_attention_impl_forwad(
             window_size=self.sliding_window,
             block_table=block_table,
             softcap=self.logits_soft_cap,
-            # scheduler_metadata=scheduler_metadata,
-            # fa_version=self.vllm_flash_attn_version,
-            # q_descale=layer._q_scale.expand(descale_shape),
-            # k_descale=layer._k_scale.expand(descale_shape),
-            # v_descale=layer._v_scale.expand(descale_shape),
+            scheduler_metadata=scheduler_metadata,
+            fa_version=2,
+            q_descale=layer._q_scale.expand(descale_shape),
+            k_descale=layer._k_scale.expand(descale_shape),
+            v_descale=layer._v_scale.expand(descale_shape),
+            s_aux=None,
+            num_splits=0,
+            cp_world_size=1,
+            cp_rank=0,
+            cp_tot_seqused_k=None,
         )
         return output
 
     # TODO: Support cascade_attention.
     raise NotImplementedError("Cascade attention is not implemented in flag_gems.")
-
-    # assert not use_local_attn, "Cascade attention does not support local attention."
-    # # Cascade attention (rare case).
-    # cascade_attention(
-    #     output[:num_actual_tokens],
-    #     query[:num_actual_tokens],
-    #     key_cache,
-    #     value_cache,
-    #     cu_query_lens=attn_metadata.query_start_loc,
-    #     max_query_len=attn_metadata.max_query_len,
-    #     cu_prefix_query_lens=attn_metadata.cu_prefix_query_lens,
-    #     prefix_kv_lens=attn_metadata.prefix_kv_lens,
-    #     suffix_kv_lens=attn_metadata.suffix_kv_lens,
-    #     max_kv_len=attn_metadata.max_seq_len,
-    #     softmax_scale=self.scale,
-    #     alibi_slopes=self.alibi_slopes,
-    #     sliding_window=self.sliding_window,
-    #     logits_soft_cap=self.logits_soft_cap,
-    #     block_table=attn_metadata.block_table,
-    #     common_prefix_len=attn_metadata.common_prefix_len,
-    #     fa_version=self.vllm_flash_attn_version,
-    #     prefix_scheduler_metadata=attn_metadata.prefix_scheduler_metadata,
-    #     suffix_scheduler_metadata=attn_metadata.scheduler_metadata,
-    #     q_descale=layer._q_scale,
-    #     k_descale=layer._k_scale,
-    #     v_descale=layer._v_scale,
-    # )
-    # return output
 
 
 def custom_silu_and_mul(out: torch.Tensor, input: torch.Tensor):
@@ -356,6 +338,32 @@ def custom_get_scheduler_metadata(
     )
 
 
+def custom_per_token_group_fp8_quant(
+    input: torch.Tensor,
+    output_q: torch.Tensor,
+    output_s: torch.Tensor,
+    group_size: int,
+    eps: float,
+    fp8_min: float,
+    fp8_max: float,
+    scale_ue8m0: bool = False,
+):
+    from flag_gems.ops import per_token_group_quant_fp8
+
+    column_major_scales = output_s.stride(0) < output_s.stride(1)
+
+    x_q, x_s = per_token_group_quant_fp8(
+        x=input,
+        group_size=group_size,
+        eps=eps,
+        column_major_scales=column_major_scales,
+        scale_ue8m0=scale_ue8m0,
+    )
+
+    output_q.copy_(x_q)
+    output_s.copy_(x_s)
+
+
 def apply_gems_patches_to_vllm(verbose=True):
     import vllm  # noqa: F401
     from vllm.attention.ops.paged_attn import PagedAttention
@@ -380,7 +388,7 @@ def apply_gems_patches_to_vllm(verbose=True):
         TritonMLAImpl, "_forward_decode", custom_gems_flash_mla_forward, verbose
     )
     patch_module_method(
-        FlashAttentionImpl, "forward", custom_gems_flash_attention_impl_forwad, verbose
+        FlashAttentionImpl, "forward", custom_gems_flash_attention_impl_forward, verbose
     )
     patch_vllm_lib("_C", "silu_and_mul", custom_silu_and_mul, "CUDA", verbose)
     patch_vllm_lib(
@@ -391,6 +399,13 @@ def apply_gems_patches_to_vllm(verbose=True):
         "_vllm_fa3_C",
         "get_scheduler_metadata",
         custom_get_scheduler_metadata,
+        "CUDA",
+        verbose,
+    )
+    patch_vllm_lib(
+        "_C",
+        "per_token_group_fp8_quant",
+        custom_per_token_group_fp8_quant,
         "CUDA",
         verbose,
     )
