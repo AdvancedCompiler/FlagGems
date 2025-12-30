@@ -33,15 +33,15 @@ def get_block_wise_smm_configs():
     return [
         triton.Config(
             {
-                "TILE_M": m,
-                "TILE_N": n,
+                "TILE_M": TILE_M,
+                "TILE_N": TILE_N,
                 "TILE_K": SCALE_BLOCK_K,
                 "SWIZZLE_GROUP_M": 8,
             },
             num_stages=stages,
             num_warps=warps,
         )
-        for m, n, stages, warps in tile_configs
+        for TILE_M, TILE_N, stages, warps in tile_configs
     ]
 
 
@@ -145,7 +145,7 @@ def _block_wise_128_smm_launcher(
     _M_NPO2 = triton.next_power_of_2(M)
 
     grid = lambda META: (
-        triton.cdiv(M, META["BLOCK_M"]) * triton.cdiv(N, META["BLOCK_N"]),
+        triton.cdiv(M, META["TILE_M"]) * triton.cdiv(N, META["TILE_N"]),
     )
 
     _block_wise_smm_kernel[grid](
@@ -206,11 +206,19 @@ def _pertensor_or_pertoken_smm_kernel(
     TILE_M: tl.constexpr,
     TILE_N: tl.constexpr,
     TILE_K: tl.constexpr,
-    SCALE_BLOCK_M: tl.constexpr,
-    SCALE_BLOCK_N: tl.constexpr,
+    IS_PER_TOKEN_A: tl.constexpr,
+    IS_PER_TOKEN_B: tl.constexpr,
 ):
-    TILE_SIZE_SCALE_A = triton.cdiv(TILE_M, SCALE_BLOCK_M)
-    TILE_SIZE_SCALE_B = triton.cdiv(TILE_N, SCALE_BLOCK_N)
+    if IS_PER_TOKEN_A:
+        TILE_SIZE_SCALE_A: tl.constexpr = TILE_M
+    else:
+        TILE_SIZE_SCALE_A: tl.constexpr = 1
+
+    if IS_PER_TOKEN_B:
+        TILE_SIZE_SCALE_B: tl.constexpr = TILE_N
+    else:
+        TILE_SIZE_SCALE_B: tl.constexpr = 1
+
     pid = tl.program_id(axis=0)
     num_pid_n = tl.cdiv(N, TILE_N)
     pid_m = pid // num_pid_n
@@ -304,6 +312,11 @@ def _pertensor_or_pertoken_smm_launcher(
 
     ACC_DTYPE = tl.float32 if a.is_floating_point() else tl.int32
 
+    _M_NPO2 = triton.next_power_of_2(M)
+
+    IS_PER_TOKEN_A = a_scales.numel() == M
+    IS_PER_TOKEN_B = b_scales.numel() == N
+
     _pertensor_or_pertoken_smm_kernel[grid](
         c,
         a,
@@ -314,15 +327,16 @@ def _pertensor_or_pertoken_smm_launcher(
         M,
         N,
         K,
+        _M_NPO2,
         a.stride(0),
         a.stride(1),
         b.stride(0),
         b.stride(1),
         c.stride(0),
         c.stride(1),
-        ACC_DTYPE,
-        SCALE_BLOCK_M=M // a_scales.numel(),
-        SCALE_BLOCK_N=N // b_scales.numel(),
+        ACC_DTYPE=ACC_DTYPE,
+        IS_PER_TOKEN_A=IS_PER_TOKEN_A,
+        IS_PER_TOKEN_B=IS_PER_TOKEN_B,
     )
 
     return c
@@ -460,10 +474,10 @@ def cutlass_scaled_mm(
         assert bias.is_contiguous(), "Bias must be contiguous"
         assert bias.dim() == 1, "Bias must be a 1D tensor"
 
-    if SM_VERISION_NUM >= 90 and SM_VERISION_NUM < 100:
-        # Hopper
+    if SM_VERISION_NUM >= 90:
+        # Hopper or newer sm
         cutlass_scaled_mm_sm90(c, a, b, a_scales, b_scales, bias)
 
-    if SM_VERISION_NUM >= 80:
+    elif SM_VERISION_NUM >= 80:
         # Ampere
         cutlass_scaled_mm_sm80(c, a, b, a_scales, b_scales, bias)

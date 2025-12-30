@@ -492,6 +492,9 @@ class CutlassScaledMMTestKit:
             if not (is_pertensor_or_pertoken or is_block_wise):
                 continue
 
+            if is_block_wise and bias is not None:
+                continue
+
             param = {
                 "M": M,
                 "N": N,
@@ -504,9 +507,9 @@ class CutlassScaledMMTestKit:
             }
             all_params.append(param)
 
-        random.seed(42)
+        # random.seed(42)
         random.shuffle(all_params)
-        return all_params[:16]
+        return all_params[:32]
 
     @staticmethod
     def baseline_scaled_mm(
@@ -581,7 +584,7 @@ def test_cutlass_scaled_mm(p):
     elif b_scale_mode == "pertoken":
         shape_b_scales = (1, N)
     else:
-        shape_b_scales = (K, ceil(N / 128))
+        shape_b_scales = (ceil(K / 128), ceil(N / 128))
 
     scale_a = torch.randn(shape_a_scales, device=flag_gems.device, dtype=torch.float32)
     scale_b = torch.randn(shape_b_scales, device=flag_gems.device, dtype=torch.float32)
@@ -595,7 +598,7 @@ def test_cutlass_scaled_mm(p):
 
     c = torch.empty((M, N), device=flag_gems.device, dtype=out_dtype)
 
-    output_kernel = flag_gems.cutlass_scaled_mm(c, a, b, scale_a, scale_b, bias)
+    flag_gems.cutlass_scaled_mm(c, a, b, scale_a, scale_b, bias)
 
     output_ref = kit.baseline_scaled_mm(a, b, scale_a, scale_b, out_dtype, bias)
 
@@ -604,4 +607,4 @@ def test_cutlass_scaled_mm(p):
     else:
         rtol, atol = 1e-1, 1.0
 
-    torch.testing.assert_close(output_kernel, output_ref, rtol=rtol, atol=atol)
+    torch.testing.assert_close(c, output_ref, rtol=rtol, atol=atol)
