@@ -16,107 +16,32 @@ SM_VERISION_NUM = get_sm_version_num()
 
 
 def get_block_wise_smm_configs():
+    tile_configs = [
+        # (TILE_M, TILE_N, num_stages, num_warps)
+        (32, 64, 5, 2),
+        (64, 32, 5, 2),
+        (64, 128, 4, 4),
+        (64, 256, 4, 4),
+        (128, 32, 4, 4),
+        (128, 64, 4, 4),
+        (128, 128, 4, 4),
+        (128, 256, 3, 8),
+        (256, 64, 4, 4),
+        (256, 128, 3, 8),
+    ]
+
     return [
         triton.Config(
-            {"TILE_M": 32, "TILE_N": 64, "TILE_K": SCALE_BLOCK_K, "SWIZZLE_GROUP_M": 8},
-            num_stages=5,
-            num_warps=2,
-        ),
-        triton.Config(
-            {"TILE_M": 64, "TILE_N": 32, "TILE_K": SCALE_BLOCK_K, "SWIZZLE_GROUP_M": 8},
-            num_stages=5,
-            num_warps=2,
-        ),
-        triton.Config(
             {
-                "TILE_M": 64,
-                "TILE_N": 128,
+                "TILE_M": m,
+                "TILE_N": n,
                 "TILE_K": SCALE_BLOCK_K,
                 "SWIZZLE_GROUP_M": 8,
             },
-            num_stages=4,
-            num_warps=4,
-        ),
-        triton.Config(
-            {
-                "TILE_M": 64,
-                "TILE_N": 256,
-                "TILE_K": SCALE_BLOCK_K,
-                "SWIZZLE_GROUP_M": 8,
-            },
-            num_stages=4,
-            num_warps=4,
-        ),
-        triton.Config(
-            {
-                "TILE_M": 64,
-                "TILE_N": 256,
-                "TILE_K": SCALE_BLOCK_K,
-                "SWIZZLE_GROUP_M": 8,
-            },
-            num_stages=4,
-            num_warps=4,
-        ),
-        triton.Config(
-            {
-                "TILE_M": 128,
-                "TILE_N": 32,
-                "TILE_K": SCALE_BLOCK_K,
-                "SWIZZLE_GROUP_M": 8,
-            },
-            num_stages=4,
-            num_warps=4,
-        ),
-        triton.Config(
-            {
-                "TILE_M": 128,
-                "TILE_N": 64,
-                "TILE_K": SCALE_BLOCK_K,
-                "SWIZZLE_GROUP_M": 8,
-            },
-            num_stages=4,
-            num_warps=4,
-        ),
-        triton.Config(
-            {
-                "TILE_M": 128,
-                "TILE_N": 128,
-                "TILE_K": SCALE_BLOCK_K,
-                "SWIZZLE_GROUP_M": 8,
-            },
-            num_stages=4,
-            num_warps=4,
-        ),
-        triton.Config(
-            {
-                "TILE_M": 128,
-                "TILE_N": 256,
-                "TILE_K": SCALE_BLOCK_K,
-                "SWIZZLE_GROUP_M": 8,
-            },
-            num_stages=3,
-            num_warps=8,
-        ),
-        triton.Config(
-            {
-                "TILE_M": 256,
-                "TILE_N": 64,
-                "TILE_K": SCALE_BLOCK_K,
-                "SWIZZLE_GROUP_M": 8,
-            },
-            num_stages=4,
-            num_warps=4,
-        ),
-        triton.Config(
-            {
-                "TILE_M": 256,
-                "TILE_N": 128,
-                "TILE_K": SCALE_BLOCK_K,
-                "SWIZZLE_GROUP_M": 8,
-            },
-            num_stages=3,
-            num_warps=8,
-        ),
+            num_stages=stages,
+            num_warps=warps,
+        )
+        for m, n, stages, warps in tile_configs
     ]
 
 
