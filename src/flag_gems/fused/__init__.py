@@ -32,6 +32,7 @@ __all__ = [
     "geglu",
     "dgeglu",
     "gelu_and_mul",
+    "grouped_topk",
     "cross_entropy_loss",
     "outer",
     "instance_norm",
@@ -48,5 +49,4 @@ __all__ = [
     "rwkv_mm_sparsity",
     "dreglu",
     "reglu",
-    "grouped_topk",
 ]
