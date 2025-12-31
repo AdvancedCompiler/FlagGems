@@ -74,8 +74,8 @@ def _block_wise_smm_kernel(
     a_ptr,
     b_ptr,
     c_ptr,
-    a_scales_ptr,
-    b_scales_ptr,
+    a_scale_ptr,
+    b_scale_ptr,
     M,
     N,
     K,
@@ -106,9 +106,9 @@ def _block_wise_smm_kernel(
     a_ptrs = a_ptr + (offs_am[:, None] * stride_am + offs_k[None, :] * stride_ak)
     b_ptrs = b_ptr + (offs_k[:, None] * stride_bk + offs_bn[None, :] * stride_bn)
 
-    a_scales_ptrs = a_scales_ptr + offs_am * stride_Ascale_m
+    a_scale_ptrs = a_scale_ptr + offs_am * stride_Ascale_m
     offs_bsn = offs_bn // SCALE_BLOCK_N
-    b_scales_ptrs = b_scales_ptr + offs_bsn * stride_Bscale_n
+    b_scale_ptrs = b_scale_ptr + offs_bsn * stride_Bscale_n
 
     acc = tl.zeros((TILE_M, TILE_N), dtype=tl.float32)
     for k in range(0, tl.cdiv(K, TILE_K)):
@@ -116,9 +116,9 @@ def _block_wise_smm_kernel(
         a = tl.load(a_ptrs, mask=offs_k[None, :] < k_remaining, other=0.0)
         b = tl.load(b_ptrs, mask=offs_k[:, None] < k_remaining, other=0.0)
         offs_ks = k * TILE_K // SCALE_BLOCK_K
-        a_scales = tl.load(a_scales_ptrs + offs_ks * stride_Ascale_k)
-        b_scales = tl.load(b_scales_ptrs + offs_ks * stride_Bscale_k)
-        acc += tl.dot(a, b) * a_scales[:, None] * b_scales[None, :]
+        a_scale = tl.load(a_scale_ptrs + offs_ks * stride_Ascale_k)
+        b_scale = tl.load(b_scale_ptrs + offs_ks * stride_Bscale_k)
+        acc += tl.dot(a, b) * a_scale[:, None] * b_scale[None, :]
         a_ptrs += TILE_K * stride_ak
         b_ptrs += TILE_K * stride_bk
 
@@ -135,8 +135,8 @@ def _block_wise_128_smm_launcher(
     c: torch.Tensor,
     a: torch.Tensor,
     b: torch.Tensor,
-    a_scales: torch.Tensor,
-    b_scales: torch.Tensor,
+    a_scale: torch.Tensor,
+    b_scale: torch.Tensor,
 ) -> torch.Tensor:
     global SCALE_BLOCK_K, SCALE_BLOCK_N
     SCALE_BLOCK_K, SCALE_BLOCK_N = 128, 128
@@ -152,8 +152,8 @@ def _block_wise_128_smm_launcher(
         a,
         b,
         c,
-        a_scales,
-        b_scales,
+        a_scale,
+        b_scale,
         M,
         N,
         K,
@@ -166,10 +166,10 @@ def _block_wise_128_smm_launcher(
         b.stride(1),
         c.stride(0),
         c.stride(1),
-        a_scales.stride(0),
-        a_scales.stride(1),
-        b_scales.stride(0),
-        b_scales.stride(1),
+        a_scale.stride(0),
+        a_scale.stride(1),
+        b_scale.stride(0),
+        b_scale.stride(1),
     )
 
     return c
@@ -189,8 +189,8 @@ def _pertensor_or_pertoken_smm_kernel(
     c_ptr,
     a_ptr,
     b_ptr,
-    a_scales_ptr,
-    b_scales_ptr,
+    a_scale_ptr,
+    b_scale_ptr,
     bias_ptr,
     M,
     N,
@@ -249,8 +249,8 @@ def _pertensor_or_pertoken_smm_kernel(
     a_ptrs = a_ptr + offsets_a
     b_ptrs = b_ptr + offsets_b
 
-    scale_a_ptrs = a_scales_ptr + offsets_scale_am
-    scale_b_ptrs = b_scales_ptr + offsets_scale_bn
+    scale_a_ptrs = a_scale_ptr + offsets_scale_am
+    scale_b_ptrs = b_scale_ptr + offsets_scale_bn
 
     for k in range(0, tl.cdiv(K, TILE_K)):
         masks_k = offsets_k < K
@@ -267,14 +267,14 @@ def _pertensor_or_pertoken_smm_kernel(
         b_ptrs += TILE_K * stride_bk
 
     masks_scale_a = masks_scale_am[:, None] & (tl.arange(0, 1) < 1)[:, None]
-    a_scales = tl.load(scale_a_ptrs[:, None], masks_scale_a)
-    a_scales = a_scales.broadcast_to((TILE_M, 1))
-    acc = a_scales * acc.to(tl.float32)
+    a_scale = tl.load(scale_a_ptrs[:, None], masks_scale_a)
+    a_scale = a_scale.broadcast_to((TILE_M, 1))
+    acc = a_scale * acc.to(tl.float32)
 
     masks_scale_b = masks_scale_bn[:, None] & (tl.arange(0, 1) < 1)[None, :]
-    b_scales = tl.load(scale_b_ptrs[:, None], masks_scale_b)
-    b_scales = b_scales.broadcast_to((TILE_N, 1))
-    acc = b_scales.T * acc.to(tl.float32)
+    b_scale = tl.load(scale_b_ptrs[:, None], masks_scale_b)
+    b_scale = b_scale.broadcast_to((TILE_N, 1))
+    acc = b_scale.T * acc.to(tl.float32)
 
     c = acc.to(c_ptr.type.element_ty)
 
@@ -299,8 +299,8 @@ def _pertensor_or_pertoken_smm_launcher(
     c: torch.Tensor,
     a: torch.Tensor,
     b: torch.Tensor,
-    a_scales: torch.Tensor,
-    b_scales: torch.Tensor,
+    a_scale: torch.Tensor,
+    b_scale: torch.Tensor,
     bias: torch.Tensor | None = None,
 ) -> torch.Tensor:
     M, K = a.shape
@@ -314,15 +314,15 @@ def _pertensor_or_pertoken_smm_launcher(
 
     _M_NPO2 = triton.next_power_of_2(M)
 
-    IS_PER_TOKEN_A = a_scales.numel() == M
-    IS_PER_TOKEN_B = b_scales.numel() == N
+    IS_PER_TOKEN_A = a_scale.numel() == M
+    IS_PER_TOKEN_B = b_scale.numel() == N
 
     _pertensor_or_pertoken_smm_kernel[grid](
         c,
         a,
         b,
-        a_scales,
-        b_scales,
+        a_scale,
+        b_scale,
         bias,
         M,
         N,
@@ -353,79 +353,79 @@ def dispatch_scaled_mm(
     c: torch.Tensor,
     a: torch.Tensor,
     b: torch.Tensor,
-    a_scales: torch.Tensor,
-    b_scales: torch.Tensor,
+    a_scale: torch.Tensor,
+    b_scale: torch.Tensor,
     bias: Optional[torch.Tensor],
     fp8_func: Callable,
     int8_func: Optional[Callable],
     blockwise_func: Callable,
 ) -> None:
-    assert a_scales.dtype == torch.float32, "a_scales must be float32"
-    assert b_scales.dtype == torch.float32, "b_scales must be float32"
+    assert a_scale.dtype == torch.float32, "a_scale must be float32"
+    assert b_scale.dtype == torch.float32, "b_scale must be float32"
 
-    if (a_scales.numel() == 1 or a_scales.numel() == a.size(0)) and (
-        b_scales.numel() == 1 or b_scales.numel() == b.size(1)
+    if (a_scale.numel() == 1 or a_scale.numel() == a.size(0)) and (
+        b_scale.numel() == 1 or b_scale.numel() == b.size(1)
     ):
-        assert a_scales.is_contiguous(), "a_scales must be contiguous"
-        assert b_scales.is_contiguous(), "b_scales must be contiguous"
+        assert a_scale.is_contiguous(), "a_scale must be contiguous"
+        assert b_scale.is_contiguous(), "b_scale must be contiguous"
 
         if a.dtype == torch.float8_e4m3fn:
-            fp8_func(c, a, b, a_scales, b_scales, bias)
+            fp8_func(c, a, b, a_scale, b_scale, bias)
         else:
             assert a.dtype == torch.int8, f"Unsupported dtype: {a.dtype}"
 
             if int8_func is not None:
-                int8_func(c, a, b, a_scales, b_scales, bias)
+                int8_func(c, a, b, a_scale, b_scale, bias)
             else:
                 raise RuntimeError(
                     f"Int8 not supported on SM{SM_VERSION_NUM}. "
                     f"Use FP8 quantization instead, or run on older arch (SM < 100)."
                 )
     else:
-        assert a_scales.dim() == 2, "a_scales must be 2D tensor for blockwise scaling"
-        assert b_scales.dim() == 2, "b_scales must be 2D tensor for blockwise scaling"
+        assert a_scale.dim() == 2, "a_scale must be 2D tensor for blockwise scaling"
+        assert b_scale.dim() == 2, "b_scale must be 2D tensor for blockwise scaling"
 
         if SM_VERSION_NUM >= 90:
-            assert a.size(0) == a_scales.size(0), (
-                f"a_scales must have same first dimension as a: "
-                f"a.shape[0]={a.size(0)}, a_scales.shape[0]={a_scales.size(0)}"
+            assert a.size(0) == a_scale.size(0), (
+                f"a_scale must have same first dimension as a: "
+                f"a.shape[0]={a.size(0)}, a_scale.shape[0]={a_scale.size(0)}"
             )
-            assert triton.cdiv(a.size(1), 128) == a_scales.size(1), (
-                f"a_scales second dimension mismatch: "
+            assert triton.cdiv(a.size(1), 128) == a_scale.size(1), (
+                f"a_scale second dimension mismatch: "
                 f"triton.cdiv({a.size(1)}, 128)={triton.cdiv(a.size(1), 128)} != "
-                f"a_scales.shape[1]={a_scales.size(1)}"
+                f"a_scale.shape[1]={a_scale.size(1)}"
             )
 
-            assert triton.cdiv(b.size(0), 128) == b_scales.size(0), (
-                f"b_scales first dimension mismatch: "
+            assert triton.cdiv(b.size(0), 128) == b_scale.size(0), (
+                f"b_scale first dimension mismatch: "
                 f"triton.cdiv({b.size(0)}, 128)={triton.cdiv(b.size(0), 128)} != "
-                f"b_scales.shape[0]={b_scales.size(0)}"
+                f"b_scale.shape[0]={b_scale.size(0)}"
             )
-            assert triton.cdiv(b.size(1), 128) == b_scales.size(1), (
-                f"b_scales second dimension mismatch: "
+            assert triton.cdiv(b.size(1), 128) == b_scale.size(1), (
+                f"b_scale second dimension mismatch: "
                 f"triton.cdiv({b.size(1)}, 128)={triton.cdiv(b.size(1), 128)} != "
-                f"b_scales.shape[1]={b_scales.size(1)}"
+                f"b_scale.shape[1]={b_scale.size(1)}"
             )
 
         assert bias is None, "Bias not yet supported for blockwise scaled_mm"
 
-        blockwise_func(c, a, b, a_scales, b_scales)
+        blockwise_func(c, a, b, a_scale, b_scale)
 
 
 def cutlass_scaled_mm_sm90(
     c: torch.Tensor,
     a: torch.Tensor,
     b: torch.Tensor,
-    a_scales: torch.Tensor,
-    b_scales: torch.Tensor,
+    a_scale: torch.Tensor,
+    b_scale: torch.Tensor,
     bias: Optional[torch.Tensor] = None,
 ) -> None:
     dispatch_scaled_mm(
         c=c,
         a=a,
         b=b,
-        a_scales=a_scales,
-        b_scales=b_scales,
+        a_scale=a_scale,
+        b_scale=b_scale,
         bias=bias,
         fp8_func=cutlass_scaled_mm_sm90_fp8,
         int8_func=cutlass_scaled_mm_sm90_int8,
@@ -457,8 +457,8 @@ def cutlass_scaled_mm(
     c: torch.Tensor,
     a: torch.Tensor,
     b: torch.Tensor,
-    a_scales: torch.Tensor,
-    b_scales: torch.Tensor,
+    a_scale: torch.Tensor,
+    b_scale: torch.Tensor,
     bias: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     assert (
@@ -488,19 +488,19 @@ def cutlass_scaled_mm(
         assert bias.dim() == 1, "Bias must be a 1D tensor"
 
     if SM_VERSION_NUM >= 120:
-        cutlass_scaled_mm_sm120(c, a, b, a_scales, b_scales, bias)
+        cutlass_scaled_mm_sm120(c, a, b, a_scale, b_scale, bias)
 
     elif SM_VERSION_NUM >= 100:
-        cutlass_scaled_mm_sm100(c, a, b, a_scales, b_scales, bias)
+        cutlass_scaled_mm_sm100(c, a, b, a_scale, b_scale, bias)
 
     elif SM_VERSION_NUM >= 90:
         # Hopper
-        cutlass_scaled_mm_sm90(c, a, b, a_scales, b_scales, bias)
+        cutlass_scaled_mm_sm90(c, a, b, a_scale, b_scale, bias)
 
     elif SM_VERSION_NUM >= 80:
         # Ampere
-        cutlass_scaled_mm_sm80(c, a, b, a_scales, b_scales, bias)
+        cutlass_scaled_mm_sm80(c, a, b, a_scale, b_scale, bias)
 
     elif SM_VERSION_NUM >= 75:
         # Turing
-        cutlass_scaled_mm_sm75(c, a, b, a_scales, b_scales, bias)
+        cutlass_scaled_mm_sm75(c, a, b, a_scale, b_scale, bias)

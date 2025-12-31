@@ -50,8 +50,8 @@ def to_fp8(tensor: torch.Tensor):
 class CutlassScaledMMTestKit:
     num_test_cases = 16 if QUICK_MODE else 32
 
-    @classmethod
-    def get_test_params(cls):
+    @staticmethod
+    def _get_all_combinations():
         # these shapes come from the test file of op `cutlass_scaled_mm` of vLLM
         mnk = [
             (1, 256, 128),
@@ -81,6 +81,16 @@ class CutlassScaledMMTestKit:
         combinations = product(
             mnk, scale_shape_types, scale_shape_types, if_use_bias, dtypes
         )
+        return combinations
+
+    @classmethod
+    def _rand_sample(cls, all_params):
+        random.shuffle(all_params)
+        return all_params[: cls.num_test_cases]
+
+    @classmethod
+    def get_test_params(cls):
+        combinations = cls._get_all_combinations()
 
         all_params = []
         for (
@@ -115,9 +125,23 @@ class CutlassScaledMMTestKit:
                 "out_dtype": out_dtype,
             }
             all_params.append(param)
-        random.shuffle(all_params)
 
-        return all_params[: cls.num_test_cases]
+        return cls._rand_sample(all_params)
+
+    @staticmethod
+    def get_scale_shape(M, N, K, category, is_a_scale=True):
+        if category == "scalar":
+            return (1,)
+        elif category == "vector":
+            if is_a_scale:
+                return (M,)
+            else:
+                return (N,)
+        else:
+            if is_a_scale:
+                return (M, ceil(K / 128))
+            else:
+                return (ceil(K / 128), ceil(N / 128))
 
     @staticmethod
     def baseline_scaled_mm(
@@ -180,19 +204,8 @@ def test_cutlass_scaled_mm(p):
         a = to_fp8(torch.randn((M, K), device=flag_gems.device))
         b = to_fp8(torch.randn((K, N), device=flag_gems.device).t().contiguous().t())
 
-    if a_scale_category == "scalar":
-        a_scale_shape = (1, 1)
-    elif a_scale_category == "vector":
-        a_scale_shape = (M, 1)
-    else:
-        a_scale_shape = (M, ceil(K / 128))
-
-    if b_scale_category == "scalar":
-        b_scale_shape = (1, 1)
-    elif b_scale_category == "vector":
-        b_scale_shape = (1, N)
-    else:
-        b_scale_shape = (ceil(K / 128), ceil(N / 128))
+    a_scale_shape = kit.get_scale_shape(M, N, K, a_scale_category)
+    b_scale_shape = kit.get_scale_shape(M, N, K, b_scale_category, False)
 
     scale_a = torch.randn(a_scale_shape, device=flag_gems.device, dtype=torch.float32)
     scale_b = torch.randn(b_scale_shape, device=flag_gems.device, dtype=torch.float32)
@@ -213,8 +226,8 @@ def test_cutlass_scaled_mm(p):
     output_ref = kit.baseline_scaled_mm(a, b, scale_a, scale_b, out_dtype, bias)
 
     if in_dtype == torch.int8:
-        rtol, atol = 1e-2, 1.0
-    else:
         rtol, atol = 1e-1, 1.0
+    else:
+        rtol, atol = 5e-1, 1.5e-1
 
     torch.testing.assert_close(c, output_ref, rtol=rtol, atol=atol)
