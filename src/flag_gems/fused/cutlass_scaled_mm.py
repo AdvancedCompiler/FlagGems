@@ -4,7 +4,7 @@ import torch
 import triton
 import triton.language as tl
 
-SCALE_BLOCK_K, SCALE_BLOCK_N = None, None
+SCALE_BLOCK_K, SCALE_BLOCK_N = 128, 128
 
 
 def get_sm_version_num():

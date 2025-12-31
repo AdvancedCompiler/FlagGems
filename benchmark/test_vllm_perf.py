@@ -87,6 +87,7 @@ class CutlassScaledMMPerfKit:
 
     @classmethod
     def _rand_sample(cls, all_params):
+        random.shuffle(all_params)
         count = [0] * 4
         for param in all_params:
             a_scale_category = param["a_scale_category"]
@@ -123,7 +124,7 @@ class CutlassScaledMMPerfKit:
             (M, N, K),
             a_scale_category,
             b_scale_category,
-            bias,
+            use_bias,
             (in_dtype, out_dtype),
         ) in combinations:
             is_scalar_or_vector_dequant = a_scale_category in [
@@ -137,7 +138,7 @@ class CutlassScaledMMPerfKit:
             if not (is_scalar_or_vector_dequant or is_block_dequant):
                 continue
 
-            if is_block_dequant and (bias is not None or M % 4 != 0):
+            if is_block_dequant and (use_bias or M % 4 != 0):
                 continue
 
             param = {
@@ -146,7 +147,7 @@ class CutlassScaledMMPerfKit:
                 "K": K,
                 "a_scale_category": a_scale_category,
                 "b_scale_category": b_scale_category,
-                "use_bias": bias,
+                "use_bias": use_bias,
                 "in_dtype": in_dtype,
                 "out_dtype": out_dtype,
             }
@@ -169,25 +170,10 @@ class CutlassScaledMMPerfKit:
             else:
                 return (ceil(K / 128), ceil(N / 128))
 
-    @staticmethod
-    def _get_scale_shape(M, N, K, category, is_a_scale):
-        if category == "scalar":
-            return (1,)
-        elif category == "vector":
-            if is_a_scale:
-                return (M,)
-            else:
-                return (N,)
-        else:
-            if is_a_scale:
-                return (M, ceil(K / 128))
-            else:
-                return (ceil(K / 128), ceil(N / 128))
-
 
 class CutlassScaledMMBenchmark(Benchmark):
     def __init__(self):
-        extended_dtypes = [(torch.float16, "pertoken"), (torch.bfloat16, "block_size")]
+        extended_dtypes = ["scalar_only", "vector_only", "scalar_and_vector", "block"]
         super().__init__(
             "cutlass_scaled_mm", torch.ops._C.cutlass_scaled_mm, extended_dtypes
         )
@@ -195,10 +181,8 @@ class CutlassScaledMMBenchmark(Benchmark):
         self.kit = CutlassScaledMMPerfKit
         self.kit.init_perf_params()
 
-    def set_more_shapes(self):
+    def set_shapes(self, shape_file_path=None):
         self.shapes = []
-
-        return ["scalar_only", "vector_only", "scalar_and_vector", "block"]
 
     def get_input_iter(self, dtype):
         params = getattr(self.kit, f"{dtype}_params")
