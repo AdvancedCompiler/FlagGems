@@ -394,7 +394,7 @@ class CutlassScaledMMBenchmark(Benchmark):
         seed(42)
 
         shuffle(MNK_FACTORS)
-        MNK_FACTORS = MNK_FACTORS[:8]
+        MNK_FACTORS = MNK_FACTORS[:16]
         if_use_bias = [True, False]
         dequantization_modes = ["Per-token", "Block-wise"]
 
@@ -422,22 +422,24 @@ class CutlassScaledMMBenchmark(Benchmark):
 
             if dequantization_mode == "Per-token":
                 a = to_int8(torch.randn((M, K), device=flag_gems.device))
-                b = to_int8(torch.randn((N, K), device=flag_gems.device).t() * 5)
+                b = to_int8(
+                    torch.randn((K, N), device=flag_gems.device).t().contiguous().t()
+                    * 5
+                )
                 scale_a = torch.randn((M,), device=flag_gems.device)
                 scale_b = torch.randn((N,), device=flag_gems.device)
             else:
                 from math import ceil
 
                 a = to_fp8(torch.randn((M, K), device=flag_gems.device))
-                b = to_fp8(torch.randn((N, K), device=flag_gems.device).t())
+                b = to_fp8(
+                    torch.randn((K, N), device=flag_gems.device).t().contiguous().t()
+                )
                 scale_a = torch.randn((M, ceil(K / 128)), device=flag_gems.device)
                 scale_b = torch.randn(
                     (ceil(K / 128), ceil(N / 128)), device=flag_gems.device
                 )
             bias = None
-            if use_bias:
-                bias = torch.randn((N,), dtype=dtype, device=flag_gems.device)
-
             output = torch.empty((a.shape[0], b.shape[1]), dtype=dtype, device=a.device)
 
             yield (output, a, b, scale_a, scale_b, bias)

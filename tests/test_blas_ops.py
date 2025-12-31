@@ -507,9 +507,10 @@ class CutlassScaledMMTestKit:
             }
             all_params.append(param)
 
-        # random.seed(42)
+        random.seed(42)
         random.shuffle(all_params)
-        return all_params[:32]
+        num_test_cases = 16 if QUICK_MODE else 32
+        return all_params[:num_test_cases]
 
     @staticmethod
     def baseline_scaled_mm(

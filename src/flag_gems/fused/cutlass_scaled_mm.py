@@ -12,7 +12,7 @@ def get_sm_version_num():
     return major * 10 + minor
 
 
-SM_VERISION_NUM = get_sm_version_num()
+SM_VERSION_NUM = get_sm_version_num()
 
 
 def get_block_wise_smm_configs():
@@ -378,14 +378,14 @@ def dispatch_scaled_mm(
                 int8_func(c, a, b, a_scales, b_scales, bias)
             else:
                 raise RuntimeError(
-                    f"Int8 not supported on SM{SM_VERISION_NUM}. "
+                    f"Int8 not supported on SM{SM_VERSION_NUM}. "
                     f"Use FP8 quantization instead, or run on older arch (SM < 100)."
                 )
     else:
         assert a_scales.dim() == 2, "a_scales must be 2D tensor for blockwise scaling"
         assert b_scales.dim() == 2, "b_scales must be 2D tensor for blockwise scaling"
 
-        if SM_VERISION_NUM >= 90:
+        if SM_VERSION_NUM >= 90:
             assert a.size(0) == a_scales.size(0), (
                 f"a_scales must have same first dimension as a: "
                 f"a.shape[0]={a.size(0)}, a_scales.shape[0]={a_scales.size(0)}"
@@ -433,11 +433,24 @@ def cutlass_scaled_mm_sm90(
     )
 
 
+def cutlass_scaled_mm_sm120(*args, **kwargs):
+    raise NotImplementedError("cutlass_scaled_mm_sm120 is not yet implemented. ")
+
+
+def cutlass_scaled_mm_sm100(*args, **kwargs):
+    raise NotImplementedError("cutlass_scaled_mm_sm100 is not yet implemented. ")
+
+
+def cutlass_scaled_mm_sm89(*args, **kwargs):
+    raise NotImplementedError("cutlass_scaled_mm_sm89 is not yet implemented. ")
+
+
 def cutlass_scaled_mm_sm80(*args, **kwargs):
-    raise NotImplementedError(
-        "cutlass_scaled_mm_sm80 is not yet implemented. "
-        "This function requires CUDA SM80+ architecture"
-    )
+    raise NotImplementedError("cutlass_scaled_mm_sm80 is not yet implemented. ")
+
+
+def cutlass_scaled_mm_sm75(*args, **kwargs):
+    raise NotImplementedError("cutlass_scaled_mm_sm75 is not yet implemented. ")
 
 
 def cutlass_scaled_mm(
@@ -474,10 +487,20 @@ def cutlass_scaled_mm(
         assert bias.is_contiguous(), "Bias must be contiguous"
         assert bias.dim() == 1, "Bias must be a 1D tensor"
 
-    if SM_VERISION_NUM >= 90:
-        # Hopper or newer sm
+    if SM_VERSION_NUM >= 120:
+        cutlass_scaled_mm_sm120(c, a, b, a_scales, b_scales, bias)
+
+    elif SM_VERSION_NUM >= 100:
+        cutlass_scaled_mm_sm100(c, a, b, a_scales, b_scales, bias)
+
+    elif SM_VERSION_NUM >= 90:
+        # Hopper
         cutlass_scaled_mm_sm90(c, a, b, a_scales, b_scales, bias)
 
-    elif SM_VERISION_NUM >= 80:
+    elif SM_VERSION_NUM >= 80:
         # Ampere
         cutlass_scaled_mm_sm80(c, a, b, a_scales, b_scales, bias)
+
+    elif SM_VERSION_NUM >= 75:
+        # Turing
+        cutlass_scaled_mm_sm75(c, a, b, a_scales, b_scales, bias)
