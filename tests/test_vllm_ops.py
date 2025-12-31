@@ -223,7 +223,9 @@ def test_cutlass_scaled_mm(p):
 
     flag_gems.cutlass_scaled_mm(c, a, b, scale_a, scale_b, bias)
 
-    output_ref = kit.baseline_scaled_mm(a, b, scale_a, scale_b, out_dtype, bias)
+    output_ref = kit.baseline_scaled_mm(
+        a, b, scale_a.view(-1, 1), scale_b.view(1, -1), out_dtype, bias
+    )
 
     if in_dtype == torch.int8:
         rtol, atol = 1e-1, 1.0
