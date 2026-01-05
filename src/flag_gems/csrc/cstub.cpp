@@ -24,31 +24,20 @@ PYBIND11_MODULE(c_operators, m) {
   m.def("div_.Tensor", &flag_gems::true_div_);
   m.def("div.Tensor_mode", &flag_gems::div_mode);
   m.def("div_.Tensor_mode", &flag_gems::div_mode_);
-  m.def("div.Scalar", &flag_gems::true_div);
-  m.def("div_.Scalar", &flag_gems::true_div_);
-  m.def("div.Scalar_mode", &flag_gems::div_mode);
-  m.def("div_.Scalar_mode", &flag_gems::div_mode_);
   m.def("floor_divide", &flag_gems::floor_div);
   m.def("floor_divide_.Tensor", &flag_gems::floor_div_);
-  m.def("floor_divide.Scalar", &flag_gems::floor_div);
-  m.def("floor_divide_.Scalar", &flag_gems::floor_div_);
   m.def("divide.Tensor", &flag_gems::true_div);
   m.def("divide_.Tensor", &flag_gems::true_div_);
-  m.def("divide.Scalar", &flag_gems::true_div);
-  m.def("divide_.Scalar", &flag_gems::true_div_);
   m.def("divide.Tensor_mode", &flag_gems::div_mode);
   m.def("divide_.Tensor_mode", &flag_gems::div_mode_);
-  m.def("divide.Scalar_mode", &flag_gems::div_mode);
-  m.def("divide_.Scalar_mode", &flag_gems::div_mode_);
   m.def("true_divide.Tensor", &flag_gems::true_div);
   m.def("true_divide_.Tensor", &flag_gems::true_div_);
-  m.def("remainder.Scalar", &flag_gems::remainder);
-  m.def("remainder_.Scalar", &flag_gems::remainder_);
   m.def("remainder.Tensor", &flag_gems::remainder);
   m.def("remainder_.Tensor", &flag_gems::remainder_);
-  m.def("remainder.Scalar_Tensor", &flag_gems::remainder);
   m.def("rwkv_mm_sparsity", &flag_gems::rwkv_mm_sparsity);
   m.def("rwkv_ka_fusion", &flag_gems::rwkv_ka_fusion);
+  m.def("copy_", &flag_gems::copy_);
+  m.def("to_copy", &flag_gems::to_copy);
 }
 namespace flag_gems {
 TORCH_LIBRARY(flag_gems, m) {
@@ -95,31 +84,16 @@ TORCH_LIBRARY(flag_gems, m) {
   m.def("div_.Tensor(Tensor(a!) self, Tensor other) -> Tensor(a!)");
   m.def("div.Tensor_mode(Tensor self, Tensor other, *, str? rounding_mode) -> Tensor");
   m.def("div_.Tensor_mode(Tensor(a!) self, Tensor other, *, str? rounding_mode) -> Tensor(a!)");
-  m.def("div.Scalar(Tensor self, Scalar other) -> Tensor");
-  m.def("div_.Scalar(Tensor(a!) self, Scalar other) -> Tensor(a!)");
-  m.def("div.Scalar_mode(Tensor self, Scalar other, *, str? rounding_mode) -> Tensor");
-  m.def("div_.Scalar_mode(Tensor(a!) self, Scalar other, *, str? rounding_mode) -> Tensor(a!)");
   m.def("floor_divide(Tensor self, Tensor other) -> Tensor");
   m.def("floor_divide_.Tensor(Tensor(a!) self, Tensor other) -> Tensor(a!)");
-  m.def("floor_divide.Scalar(Tensor self, Scalar other) -> Tensor");
-  m.def("floor_divide_.Scalar(Tensor(a!) self, Scalar other) -> Tensor(a!)");
   m.def("divide.Tensor(Tensor self, Tensor other) -> Tensor");
   m.def("divide_.Tensor(Tensor(a!) self, Tensor other) -> Tensor(a!)");
-  m.def("divide.Scalar(Tensor self, Scalar other) -> Tensor");
-  m.def("divide_.Scalar(Tensor(a!) self, Scalar other) -> Tensor(a!)");
   m.def("divide.Tensor_mode(Tensor self, Tensor other, *, str? rounding_mode) -> Tensor");
   m.def("divide_.Tensor_mode(Tensor(a!) self, Tensor other, *, str? rounding_mode) -> Tensor(a!)");
-  m.def("divide.Scalar_mode(Tensor self, Scalar other, *, str? rounding_mode) -> Tensor");
-  m.def("divide_.Scalar_mode(Tensor(a!) self, Scalar other, *, str? rounding_mode) -> Tensor(a!)");
   m.def("true_divide.Tensor(Tensor self, Tensor other) -> Tensor");
   m.def("true_divide_.Tensor(Tensor(a!) self, Tensor other) -> Tensor(a!)");
-  m.def("true_divide.Scalar(Tensor self, Scalar other) -> Tensor");
-  m.def("true_divide_.Scalar(Tensor(a!) self, Scalar other) -> Tensor(a!)");
-  m.def("remainder.Scalar(Tensor self, Scalar other) -> Tensor");
-  m.def("remainder_.Scalar(Tensor(a!) self, Scalar other) -> Tensor(a!)");
   m.def("remainder.Tensor(Tensor self, Tensor other) -> Tensor");
   m.def("remainder_.Tensor(Tensor(a!) self, Tensor other) -> Tensor(a!)");
-  m.def("remainder.Scalar_Tensor(Scalar self, Tensor other) -> Tensor");
   // sort
   m.def("sort(Tensor self, int dim=-1, bool descending=False) -> (Tensor values, Tensor indices)");
   m.def(
@@ -151,6 +125,10 @@ TORCH_LIBRARY(flag_gems, m) {
 
   m.def("rwkv_mm_sparsity(Tensor k, Tensor v) -> Tensor");
   m.def("rwkv_ka_fusion(Tensor k, Tensor kk, Tensor a, Tensor ka, int H, int N) -> (Tensor, Tensor, Tensor)");
+  m.def("copy_(Tensor(a!) dst, Tensor src, bool non_blocking=False) -> Tensor(a!)");
+  m.def(
+      "to_copy(Tensor self, *, ScalarType? dtype=None, Layout? layout=None, Device? device=None, bool? "
+      "pin_memory=None, bool non_blocking=False, MemoryFormat? memory_format=None) -> Tensor");
 }
 
 TORCH_LIBRARY_IMPL(flag_gems, CUDA, m) {
@@ -223,5 +201,7 @@ TORCH_LIBRARY_IMPL(flag_gems, CUDA, m) {
   m.impl("flash_attn_varlen_func", TORCH_FN(flash_attn_varlen_func));
   m.impl("rwkv_mm_sparsity", TORCH_FN(rwkv_mm_sparsity));
   m.impl("rwkv_ka_fusion", TORCH_FN(rwkv_ka_fusion));
+  m.impl("to_copy", TORCH_FN(to_copy));
+  m.impl("copy_", TORCH_FN(copy_));
 }
 }  // namespace flag_gems
