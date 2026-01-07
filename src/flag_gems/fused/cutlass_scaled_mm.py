@@ -19,7 +19,7 @@ def get_block_wise_smm_configs():
     tile_configs = [
         # (TILE_M, TILE_N, num_stages, num_warps)
         (32, 64, 5, 2),
-        (64, 32, 5, 2),
+        (64, 64, 5, 2),
         (64, 128, 4, 4),
         (64, 256, 4, 4),
         (128, 32, 4, 4),
@@ -342,13 +342,6 @@ def _pertensor_or_pertoken_smm_launcher(
     return c
 
 
-cutlass_scaled_mm_sm90_fp8 = _pertensor_or_pertoken_smm_launcher
-
-cutlass_scaled_mm_sm90_int8 = _pertensor_or_pertoken_smm_launcher
-
-cutlass_scaled_mm_blockwise_sm90_fp8 = _block_wise_128_smm_launcher
-
-
 def dispatch_scaled_mm(
     c: torch.Tensor,
     a: torch.Tensor,
@@ -370,42 +363,44 @@ def dispatch_scaled_mm(
         assert b_scale.is_contiguous(), "b_scale must be contiguous"
 
         if a.dtype == torch.float8_e4m3fn:
+            assert fp8_func is not None, f"Fp8 is not supported on SM{SM_VERSION_NUM}."
             fp8_func(c, a, b, a_scale, b_scale, bias)
         else:
             assert a.dtype == torch.int8, f"Unsupported dtype: {a.dtype}"
 
-            if int8_func is not None:
-                int8_func(c, a, b, a_scale, b_scale, bias)
-            else:
-                raise RuntimeError(
-                    f"Int8 not supported on SM{SM_VERSION_NUM}. "
-                    f"Use FP8 quantization instead, or run on older arch (SM < 100)."
-                )
+            assert (
+                int8_func is not None
+            ), f"Int8 is not supported on SM{SM_VERSION_NUM}."
+
+            int8_func(c, a, b, a_scale, b_scale, bias)
     else:
+        assert (
+            blockwise_func is not None
+        ), "Group dequantization is not supported on SM{SM_VERSION_NUM}."
+
         assert a_scale.dim() == 2, "a_scale must be 2D tensor for blockwise scaling"
         assert b_scale.dim() == 2, "b_scale must be 2D tensor for blockwise scaling"
 
-        if SM_VERSION_NUM >= 90:
-            assert a.size(0) == a_scale.size(0), (
-                f"a_scale must have same first dimension as a: "
-                f"a.shape[0]={a.size(0)}, a_scale.shape[0]={a_scale.size(0)}"
-            )
-            assert triton.cdiv(a.size(1), 128) == a_scale.size(1), (
-                f"a_scale second dimension mismatch: "
-                f"triton.cdiv({a.size(1)}, 128)={triton.cdiv(a.size(1), 128)} != "
-                f"a_scale.shape[1]={a_scale.size(1)}"
-            )
+        assert a.size(0) == a_scale.size(0), (
+            f"a_scale must have same first dimension as a: "
+            f"a.shape[0]={a.size(0)}, a_scale.shape[0]={a_scale.size(0)}"
+        )
+        assert triton.cdiv(a.size(1), 128) == a_scale.size(1), (
+            f"a_scale second dimension mismatch: "
+            f"triton.cdiv({a.size(1)}, 128)={triton.cdiv(a.size(1), 128)} != "
+            f"a_scale.shape[1]={a_scale.size(1)}"
+        )
 
-            assert triton.cdiv(b.size(0), 128) == b_scale.size(0), (
-                f"b_scale first dimension mismatch: "
-                f"triton.cdiv({b.size(0)}, 128)={triton.cdiv(b.size(0), 128)} != "
-                f"b_scale.shape[0]={b_scale.size(0)}"
-            )
-            assert triton.cdiv(b.size(1), 128) == b_scale.size(1), (
-                f"b_scale second dimension mismatch: "
-                f"triton.cdiv({b.size(1)}, 128)={triton.cdiv(b.size(1), 128)} != "
-                f"b_scale.shape[1]={b_scale.size(1)}"
-            )
+        assert triton.cdiv(b.size(0), 128) == b_scale.size(0), (
+            f"b_scale first dimension mismatch: "
+            f"triton.cdiv({b.size(0)}, 128)={triton.cdiv(b.size(0), 128)} != "
+            f"b_scale.shape[0]={b_scale.size(0)}"
+        )
+        assert triton.cdiv(b.size(1), 128) == b_scale.size(1), (
+            f"b_scale second dimension mismatch: "
+            f"triton.cdiv({b.size(1)}, 128)={triton.cdiv(b.size(1), 128)} != "
+            f"b_scale.shape[1]={b_scale.size(1)}"
+        )
 
         assert bias is None, "Bias not yet supported for blockwise scaled_mm"
 
@@ -427,9 +422,9 @@ def cutlass_scaled_mm_sm90(
         a_scale=a_scale,
         b_scale=b_scale,
         bias=bias,
-        fp8_func=cutlass_scaled_mm_sm90_fp8,
-        int8_func=cutlass_scaled_mm_sm90_int8,
-        blockwise_func=cutlass_scaled_mm_blockwise_sm90_fp8,
+        fp8_func=_pertensor_or_pertoken_smm_launcher,
+        int8_func=_pertensor_or_pertoken_smm_launcher,
+        blockwise_func=_block_wise_128_smm_launcher,
     )
 
 
@@ -441,12 +436,46 @@ def cutlass_scaled_mm_sm100(*args, **kwargs):
     raise NotImplementedError("cutlass_scaled_mm_sm100 is not yet implemented. ")
 
 
-def cutlass_scaled_mm_sm89(*args, **kwargs):
-    raise NotImplementedError("cutlass_scaled_mm_sm89 is not yet implemented. ")
+def cutlass_scaled_mm_sm89(
+    c: torch.Tensor,
+    a: torch.Tensor,
+    b: torch.Tensor,
+    a_scale: torch.Tensor,
+    b_scale: torch.Tensor,
+    bias: Optional[torch.Tensor] = None,
+) -> None:
+    dispatch_scaled_mm(
+        c=c,
+        a=a,
+        b=b,
+        a_scale=a_scale,
+        b_scale=b_scale,
+        bias=bias,
+        fp8_func=_pertensor_or_pertoken_smm_launcher,
+        int8_func=_pertensor_or_pertoken_smm_launcher,
+        blockwise_func=None,
+    )
 
 
-def cutlass_scaled_mm_sm80(*args, **kwargs):
-    raise NotImplementedError("cutlass_scaled_mm_sm80 is not yet implemented. ")
+def cutlass_scaled_mm_sm80(
+    c: torch.Tensor,
+    a: torch.Tensor,
+    b: torch.Tensor,
+    a_scale: torch.Tensor,
+    b_scale: torch.Tensor,
+    bias: Optional[torch.Tensor] = None,
+) -> None:
+    dispatch_scaled_mm(
+        c=c,
+        a=a,
+        b=b,
+        a_scale=a_scale,
+        b_scale=b_scale,
+        bias=bias,
+        fp8_func=None,
+        int8_func=_pertensor_or_pertoken_smm_launcher,
+        blockwise_func=None,
+    )
 
 
 def cutlass_scaled_mm_sm75(*args, **kwargs):

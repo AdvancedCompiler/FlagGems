@@ -24,16 +24,36 @@ def is_vllm_available():
 
 VLLM_AVAILABLE = is_vllm_available()
 
+CUDA_AVAILABLE = flag_gems.device == "cuda"
+
+
+def get_sm_version_num():
+    major, minor = torch.cuda.get_device_capability()
+    return major * 10 + minor
+
+
+SM_VERSION_NUM = get_sm_version_num()
+
 
 def is_hopper_available():
-    if flag_gems.device != "cuda":
-        return False
-    major, minor = torch.cuda.get_device_capability()
-    sm_version_num = major * 10 + minor
-    return sm_version_num >= 90 and sm_version_num < 100
+    return CUDA_AVAILABLE and SM_VERSION_NUM >= 90 and SM_VERSION_NUM < 100
 
 
 HOPPER_AVAILABLE = is_hopper_available()
+
+
+def is_ada_available():
+    return CUDA_AVAILABLE and SM_VERSION_NUM == 89
+
+
+ADA_AVAILABLE = is_ada_available()
+
+
+def is_ampere_available():
+    return CUDA_AVAILABLE and SM_VERSION_NUM >= 80 and SM_VERSION_NUM < 89
+
+
+AMPERE_AVAILABLE = is_ampere_available()
 
 
 def to_int8(tensor: torch.Tensor):
@@ -97,7 +117,7 @@ class CutlassScaledMMTestKit:
             (M, N, K),
             a_scale_category,
             b_scale_category,
-            bias,
+            use_bias,
             (in_dtype, out_dtype),
         ) in combinations:
             is_scalar_or_vector_dequant = a_scale_category in [
@@ -111,8 +131,21 @@ class CutlassScaledMMTestKit:
             if not (is_scalar_or_vector_dequant or is_block_dequant):
                 continue
 
-            if is_block_dequant and (bias is not None or M % 4 != 0):
+            if is_block_dequant and (
+                use_bias or M % 4 != 0 or in_dtype != torch.float8_e4m3fn
+            ):
                 continue
+
+            if HOPPER_AVAILABLE:
+                pass
+            elif ADA_AVAILABLE:
+                if is_block_dequant:
+                    continue
+            elif AMPERE_AVAILABLE:
+                if is_block_dequant or (
+                    is_scalar_or_vector_dequant and in_dtype != torch.int8
+                ):
+                    continue
 
             param = {
                 "M": M,
@@ -120,7 +153,7 @@ class CutlassScaledMMTestKit:
                 "K": K,
                 "a_scale_category": a_scale_category,
                 "b_scale_category": b_scale_category,
-                "use_bias": bias,
+                "use_bias": use_bias,
                 "in_dtype": in_dtype,
                 "out_dtype": out_dtype,
             }
@@ -181,7 +214,7 @@ class CutlassScaledMMTestKit:
 
 
 @pytest.mark.skipif(
-    not (VLLM_AVAILABLE and HOPPER_AVAILABLE),
+    not (VLLM_AVAILABLE and (HOPPER_AVAILABLE or ADA_AVAILABLE or AMPERE_AVAILABLE)),
     reason="requires vLLM and NVIDIA Hopper architecture",
 )
 @pytest.mark.cutlass_scaled_mm
