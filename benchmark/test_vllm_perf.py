@@ -192,12 +192,12 @@ class CutlassScaledMMPerfKit:
     @staticmethod
     def get_scale_shape(M, N, K, category, is_a_scale=True):
         if category == "scalar":
-            return (1,)
+            return (1, 1)
         elif category == "vector":
             if is_a_scale:
-                return (M,)
+                return (M, 1)
             else:
-                return (N,)
+                return (1, N)
         else:
             if is_a_scale:
                 return (M, ceil(K / 128))

@@ -526,6 +526,10 @@ def cutlass_scaled_mm(
         # Hopper
         cutlass_scaled_mm_sm90(c, a, b, a_scale, b_scale, bias)
 
+    elif SM_VERSION_NUM == 89:
+        # Hopper
+        cutlass_scaled_mm_sm89(c, a, b, a_scale, b_scale, bias)
+
     elif SM_VERSION_NUM >= 80:
         # Ampere
         cutlass_scaled_mm_sm80(c, a, b, a_scale, b_scale, bias)

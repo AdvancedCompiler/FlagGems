@@ -164,12 +164,12 @@ class CutlassScaledMMTestKit:
     @staticmethod
     def get_scale_shape(M, N, K, category, is_a_scale=True):
         if category == "scalar":
-            return (1,)
+            return (1, 1)
         elif category == "vector":
             if is_a_scale:
-                return (M,)
+                return (M, 1)
             else:
-                return (N,)
+                return (1, N)
         else:
             if is_a_scale:
                 return (M, ceil(K / 128))
@@ -256,9 +256,7 @@ def test_cutlass_scaled_mm(p):
 
     flag_gems.cutlass_scaled_mm(c, a, b, scale_a, scale_b, bias)
 
-    output_ref = kit.baseline_scaled_mm(
-        a, b, scale_a.view(-1, 1), scale_b.view(1, -1), out_dtype, bias
-    )
+    output_ref = kit.baseline_scaled_mm(a, b, scale_a, scale_b, out_dtype, bias)
 
     if in_dtype == torch.int8:
         rtol, atol = 1e-1, 1.0
