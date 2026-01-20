@@ -13,7 +13,6 @@ from flag_gems.logging_utils import setup_flaggems_logging
 from flag_gems.modules import *  # noqa: F403
 from flag_gems.ops import *  # noqa: F403
 from flag_gems.patches import *  # noqa: F403
-from flag_gems.runtime.backend._nvidia.hopper.grouped_topk import grouped_topk
 from flag_gems.runtime.register import Register
 
 __version__ = "4.2.0"
@@ -480,5 +479,4 @@ __all__ = [
     "enable",
     "only_enable",
     "use_gems",
-    "grouped_topk",
 ]
