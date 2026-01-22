@@ -1,4 +1,3 @@
-import logging
 import warnings
 
 import torch
@@ -9,7 +8,7 @@ from flag_gems import runtime
 from flag_gems.config import aten_patch_list
 from flag_gems.experimental_ops import *  # noqa: F403
 from flag_gems.fused import *  # noqa: F403
-from flag_gems.logging_utils import setup_flaggems_logging
+from flag_gems.logging_utils import setup_flaggems_logging, teardown_flaggems_logging
 from flag_gems.modules import *  # noqa: F403
 from flag_gems.ops import *  # noqa: F403
 from flag_gems.patches import *  # noqa: F403
@@ -89,6 +88,7 @@ _FULL_CONFIG = (
     ("bitwise_or_.Scalar", bitwise_or_scalar_),
     ("bitwise_or_.Tensor", bitwise_or_tensor_),
     ("bmm", bmm),
+    ("bmm.out", bmm_out),
     ("cat", cat),
     ("celu", celu),
     ("celu_", celu_),
@@ -460,9 +460,7 @@ class use_gems:
         del self.registrar
         del current_work_registrar
         if self.record:
-            for handler in logging.root.handlers[:]:
-                logging.root.removeHandler(handler)
-            logging.basicConfig(level=logging.INFO)
+            teardown_flaggems_logging()
 
     @property
     def experimental_ops(self):
