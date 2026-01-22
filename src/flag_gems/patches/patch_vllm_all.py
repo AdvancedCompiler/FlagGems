@@ -424,8 +424,8 @@ def custom_gems_flashattn_mla_forward_decode(
     self,
     q: torch.Tensor | tuple[torch.Tensor, torch.Tensor],
     kv_c_and_k_pe_cache: torch.Tensor,
-    attn_metadata, #FlashAttnMLAMetadata
-    layer, #AttentionLayer
+    attn_metadata,  # FlashAttnMLAMetadata
+    layer,  # AttentionLayer
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
     from flag_gems import flash_attn_varlen_func
 
@@ -479,6 +479,7 @@ def custom_gems_flashattn_mla_forward_decode(
         o = attn_out
         return o, None
 
+
 def apply_gems_patches_to_vllm(verbose=True):
     import vllm  # noqa: F401
     import vllm._custom_ops as ops  # noqa: F401
@@ -487,8 +488,8 @@ def apply_gems_patches_to_vllm(verbose=True):
     from vllm.model_executor.layers.layernorm import RMSNorm
     from vllm.model_executor.layers.rotary_embedding import RotaryEmbedding
     from vllm.v1.attention.backends.flash_attn import FlashAttentionImpl
-    from vllm.v1.attention.backends.mla.triton_mla import TritonMLAImpl
     from vllm.v1.attention.backends.mla.flashattn_mla import FlashAttnMLAImpl
+    from vllm.v1.attention.backends.mla.triton_mla import TritonMLAImpl
 
     patch_module_method(RMSNorm, "forward_cuda", custom_gems_rms_forward_cuda, verbose)
     patch_module_method(
@@ -508,7 +509,10 @@ def apply_gems_patches_to_vllm(verbose=True):
         FlashAttentionImpl, "forward", custom_gems_flash_attention_impl_forward, verbose
     )
     patch_module_method(
-        FlashAttnMLAImpl, "_forward_decode", custom_gems_flashattn_mla_forward_decode, verbose
+        FlashAttnMLAImpl,
+        "_forward_decode",
+        custom_gems_flashattn_mla_forward_decode,
+        verbose,
     )
     patch_vllm_lib("_C", "silu_and_mul", custom_silu_and_mul, "CUDA", verbose)
     patch_vllm_lib("_C", "cutlass_scaled_mm", custom_cutlass_scaled_mm, "CUDA", verbose)
@@ -538,4 +542,10 @@ def apply_gems_patches_to_vllm(verbose=True):
         "CUDA",
         verbose,
     )
-    patch_vllm_lib("_C_cache_ops", "concat_and_cache_mla", custom_concat_and_cache_mla, "CUDA", verbose)
+    patch_vllm_lib(
+        "_C_cache_ops",
+        "concat_and_cache_mla",
+        custom_concat_and_cache_mla,
+        "CUDA",
+        verbose,
+    )
