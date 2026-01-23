@@ -3,7 +3,6 @@ from typing import Optional, Tuple
 
 import torch
 import torch.nn.functional as F
-from vllm.attention.ops import vit_attn_wrappers as vitw
 
 import flag_gems
 from flag_gems.patches.patch_util import patch_module_method, patch_vllm_lib
@@ -413,6 +412,7 @@ def custom_cutlass_scaled_mm(
 def apply_gems_patches_to_vllm(verbose=True):
     import vllm  # noqa: F401
     import vllm._custom_ops as ops  # noqa: F401
+    from vllm.attention.ops import vit_attn_wrappers as vitw
     from vllm.attention.ops.paged_attn import PagedAttention
     from vllm.model_executor.layers.activation import SiluAndMul
     from vllm.model_executor.layers.layernorm import RMSNorm
