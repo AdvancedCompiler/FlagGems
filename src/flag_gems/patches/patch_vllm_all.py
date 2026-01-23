@@ -1,6 +1,9 @@
+import os
 from typing import Optional, Tuple
 
 import torch
+import torch.nn.functional as F
+from vllm.attention.ops import vit_attn_wrappers as vitw
 
 import flag_gems
 from flag_gems.patches.patch_util import patch_module_method, patch_vllm_lib
@@ -462,3 +465,38 @@ def apply_gems_patches_to_vllm(verbose=True):
         "CUDA",
         verbose,
     )
+
+    _orig_vit = vitw.vit_xformers_attn_wrapper
+
+    def _seqlens_to_cu_seqlens(seqlens: torch.Tensor) -> torch.Tensor:
+        seqlens_i32 = seqlens.to(dtype=torch.int32)
+        return F.pad(torch.cumsum(seqlens_i32, dim=0), (1, 0))
+
+    def _wrapped_vit_xformers_attn_wrapper(
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        seqlens: torch.Tensor,
+    ) -> torch.Tensor:
+        if os.getenv("VIT_ATTN_BACKEND", "xformers") == "no-sdpa":
+            return _orig_vit(q, k, v, seqlens)
+
+        cu_seqlens = _seqlens_to_cu_seqlens(seqlens)
+
+        try:
+            from torch.nn.attention import SDPBackend, sdpa_kernel
+
+            ctx = sdpa_kernel(backends=[SDPBackend.FLASH_ATTENTION])
+        except Exception:
+            from torch.backends.cuda import sdp_kernel
+
+            ctx = sdp_kernel(
+                enable_flash=True,
+                enable_math=False,
+                enable_mem_efficient=False,
+            )
+
+        with ctx:
+            return torch.ops.vllm.torch_sdpa_wrapper(q, k, v, cu_seqlens)
+
+    vitw.vit_xformers_attn_wrapper = _wrapped_vit_xformers_attn_wrapper
