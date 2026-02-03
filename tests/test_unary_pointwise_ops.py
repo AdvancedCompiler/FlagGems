@@ -1059,7 +1059,9 @@ def test_accuracy_triu_(shape, diagonal, dtype):
         res = inp.triu_(diagonal)
 
     gems_assert_equal(inp, ref_out)
-    assert res is inp, "triu_ 返回值非输入张量自身，不支持链式调用！"
+    assert (
+        res is inp
+    ), "triu_ returns a value that is not the input tensor itself and does not support chaining!"
 
     M, N = inp.shape[-2], inp.shape[-1]
     has_modified_elem = False
@@ -1071,7 +1073,9 @@ def test_accuracy_triu_(shape, diagonal, dtype):
         if has_modified_elem:
             break
     if has_modified_elem:
-        assert not torch.allclose(inp, inp_original), "triu_ 未实现原地修改，原始张量无变化！"
+        assert not torch.allclose(
+            inp, inp_original
+        ), "triu_ in-place modification not implemented, the original tensor remains unchanged!"
 
 
 @pytest.mark.erf

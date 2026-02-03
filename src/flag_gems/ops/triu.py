@@ -107,15 +107,13 @@ def triu(A, diagonal=0):
 
 def triu_(A, diagonal=0):
     logger.debug("GEMS TRIU_ (inplace)")
-
     if not A.is_contiguous():
         logger.warning(
-            "Input tensor is not contiguous, cannot perform true in-place operation"
+            "Input tensor is not contiguous, automatically making it contiguous (may affect performance)"
         )
-        raise RuntimeError("Input tensor must be contiguous for in-place operation")
+        A = A.contiguous()
 
     assert len(A.shape) > 1, "Input tensor must have at least 2 dimensions"
-
     diagonal = int(diagonal)
     M, N = A.shape[-2:]
 
