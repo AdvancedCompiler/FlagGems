@@ -103,3 +103,34 @@ def triu(A, diagonal=0):
             )
             out = out.view(A.shape)
     return out
+
+
+def triu_(A, diagonal=0):
+    logger.debug("GEMS TRIU_ (inplace)")
+
+    if not A.is_contiguous():
+        logger.warning(
+            "Input tensor is not contiguous, cannot perform true in-place operation"
+        )
+        raise RuntimeError("Input tensor must be contiguous for in-place operation")
+
+    assert len(A.shape) > 1, "Input tensor must have at least 2 dimensions"
+
+    diagonal = int(diagonal)
+    M, N = A.shape[-2:]
+
+    with torch_device_fn.device(A.device):
+        if len(A.shape) == 2:
+            grid = lambda meta: (triton.cdiv(M, meta["M_BLOCK_SIZE"]),)
+            triu_kernel[grid](A, A, M, N, diagonal)
+        else:
+            batch = int(torch.numel(A) / M / N)
+            B = A.view(batch, -1)
+            grid = lambda meta: (
+                triton.cdiv(batch, meta["BATCH_BLOCK_SIZE"]),
+                triton.cdiv(M * N, meta["MN_BLOCK_SIZE"]),
+            )
+
+            triu_batch_kernel[grid](B, B, batch, M * N, N, diagonal)
+
+    return A
