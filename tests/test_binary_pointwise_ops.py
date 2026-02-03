@@ -1819,10 +1819,10 @@ def test_accuracy_logical_or_(shape, dtype):
     gems_assert_equal(res_out, ref_out)
 
 
-@pytest.mark.logical_and
+@pytest.mark.logical_and_
 @pytest.mark.parametrize("shape", POINTWISE_SHAPES)
 @pytest.mark.parametrize("dtype", ALL_FLOAT_DTYPES + ALL_INT_DTYPES + BOOL_TYPES)
-def test_accuracy_logical_and(shape, dtype):
+def test_accuracy_logical_and_(shape, dtype):
     if flag_gems.vendor_name == "kunlunxin":
         torch.manual_seed(0)
         torch.cuda.manual_seed_all(0)
@@ -1844,6 +1844,7 @@ def test_accuracy_logical_and(shape, dtype):
         inp2 = torch.randint(0, 2, shape, dtype=dtype, device="cpu").to(
             flag_gems.device
         )
+
     ref_inp1 = to_reference(inp1.clone())
     ref_inp2 = to_reference(inp2)
 
@@ -1854,10 +1855,10 @@ def test_accuracy_logical_and(shape, dtype):
     gems_assert_equal(res_out, ref_out)
 
 
-@pytest.mark.logical_and_
+@pytest.mark.logical_and
 @pytest.mark.parametrize("shape", POINTWISE_SHAPES)
 @pytest.mark.parametrize("dtype", ALL_FLOAT_DTYPES + ALL_INT_DTYPES + BOOL_TYPES)
-def test_accuracy_logical_and_(shape, dtype):
+def test_accuracy_logical_and(shape, dtype):
     if flag_gems.vendor_name == "kunlunxin":
         torch.manual_seed(0)
         torch.cuda.manual_seed_all(0)
