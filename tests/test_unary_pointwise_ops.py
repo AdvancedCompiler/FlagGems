@@ -1045,6 +1045,35 @@ def test_accuracy_triu(shape, diagonal, dtype):
     gems_assert_equal(res_out, ref_out)
 
 
+@pytest.mark.triu_
+@pytest.mark.parametrize("shape, diagonal", SHAPE_DIAGONAL)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_triu_(shape, diagonal, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=flag_gems.device)
+    inp = unsqueeze_tensor(inp, 2)
+    inp_original = inp.clone().detach()
+    ref_inp = to_reference(inp_original)
+    ref_out = torch.triu(ref_inp, diagonal)
+
+    with flag_gems.use_gems():
+        res = inp.triu_(diagonal)
+
+    gems_assert_equal(inp, ref_out)
+    assert res is inp, "triu_ 返回值非输入张量自身，不支持链式调用！"
+
+    M, N = inp.shape[-2], inp.shape[-1]
+    has_modified_elem = False
+    for i in range(M):
+        for j in range(N):
+            if j < i + diagonal:
+                has_modified_elem = True
+                break
+        if has_modified_elem:
+            break
+    if has_modified_elem:
+        assert not torch.allclose(inp, inp_original), "triu_ 未实现原地修改，原始张量无变化！"
+
+
 @pytest.mark.erf
 @pytest.mark.parametrize("shape", POINTWISE_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
