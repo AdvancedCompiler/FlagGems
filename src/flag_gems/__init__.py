@@ -92,9 +92,6 @@ _FULL_CONFIG = (
     ("cat", cat),
     ("celu", celu),
     ("celu_", celu_),
-    ("ceil", ceil),
-    ("ceil_", ceil_),
-    ("ceil.out", ceil_out),
     ("clamp", clamp),
     ("clamp.Tensor", clamp_tensor),
     ("clamp_min", clamp_min),
@@ -149,7 +146,6 @@ _FULL_CONFIG = (
     ("embedding_backward", embedding_backward),
     ("eq.Scalar", eq_scalar),
     ("eq.Tensor", eq),
-    ("equal", equal),
     ("erf", erf),
     ("erf_", erf_),
     ("exp", exp),
@@ -210,7 +206,6 @@ _FULL_CONFIG = (
     ("logical_and", logical_and),
     ("logical_not", logical_not),
     ("logical_or", logical_or),
-    ("logical_or_", logical_or_),
     ("logical_xor", logical_xor),
     ("logspace", logspace),
     ("lt.Scalar", lt_scalar),
@@ -351,8 +346,8 @@ _FULL_CONFIG = (
     ("where.self", where_self),
     ("where.self_out", where_self_out),
     ("zeros", zeros),
-    ("zero_", zero_),
     ("zeros_like", zeros_like),
+    ("one_hot", one_hot),
 )
 
 # Cache mapping from function name -> list of _FULL_CONFIG entries for quick lookup
