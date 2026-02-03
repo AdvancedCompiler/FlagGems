@@ -90,6 +90,18 @@ def test_accuracy_zeros(shape, dtype):
     )
 
 
+@pytest.mark.zero_
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", BOOL_TYPES + ALL_INT_DTYPES + ALL_FLOAT_DTYPES)
+def test_accuracy_zero_(shape, dtype):
+    out = torch.ones(shape, dtype=dtype, device=flag_gems.device)
+    ref_out = to_reference(out)
+    ref_out.zero_()
+    with flag_gems.use_gems():
+        out.zero_()
+    gems_assert_equal(out, ref_out)
+
+
 @pytest.mark.ones
 @pytest.mark.parametrize("shape", POINTWISE_SHAPES)
 @pytest.mark.parametrize("dtype", BOOL_TYPES + ALL_INT_DTYPES + ALL_FLOAT_DTYPES)
@@ -243,8 +255,9 @@ def test_accuracy_eye(shape, dtype):
         torch.eye(n, dtype=dtype, device="cpu" if TO_CPU else device),
     )
 
+    # referen https://github.com/pytorch/pytorch/blob/main/test/test_nn.py:9822
 
-# referen https://github.com/pytorch/pytorch/blob/main/test/test_nn.py:9822
+
 @pytest.mark.one_hot
 def test_accuracy_one_hot():
     from flag_gems.ops.one_hot import one_hot as gems_one_hot
