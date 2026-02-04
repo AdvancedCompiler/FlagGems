@@ -1037,7 +1037,7 @@ def test_accuracy_triu(shape, diagonal, dtype):
     inp = torch.randn(shape, dtype=dtype, device=flag_gems.device)
     inp = unsqueeze_tensor(inp, 2)
 
-    ref_inp = inp.clone()
+    ref_inp = to_reference(inp)
     ref_out = torch.triu(ref_inp, diagonal)
 
     with flag_gems.use_gems():
@@ -1057,7 +1057,7 @@ def test_accuracy_triu_noncontiguous(shape, diagonal, dtype):
     if inp.dim() >= 2:
         inp = inp.transpose(-2, -1)
 
-    ref_inp = inp.clone()
+    ref_inp = to_reference(inp)
     ref_out = torch.triu(ref_inp, diagonal)
 
     with flag_gems.use_gems():
@@ -1074,7 +1074,7 @@ def test_accuracy_triu_(shape, diagonal, dtype):
     inp = torch.randn(shape, dtype=dtype, device=flag_gems.device)
     inp = unsqueeze_tensor(inp, 2)
 
-    ref_inp = inp.clone()
+    ref_inp = to_reference(inp.clone())
     inp_original = inp.clone().detach()
 
     ref_inp.triu_(diagonal)
@@ -1117,7 +1117,7 @@ def test_accuracy_triu_inplace_noncontiguous(shape, diagonal, dtype):
     if inp.dim() >= 2:
         inp = inp.transpose(-2, -1)
 
-    ref_inp = inp.clone()
+    ref_inp = to_reference(inp.clone())
     inp_original = inp.clone().detach()
 
     ref_inp.triu_(diagonal)
