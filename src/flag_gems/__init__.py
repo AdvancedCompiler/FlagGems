@@ -262,6 +262,7 @@ _FULL_CONFIG = (
     ("normal.Tensor_Tensor", normal_tensor_tensor),
     ("ones", ones),
     ("ones_like", ones_like),
+    ("one_hot", one_hot),
     ("pad", pad),
     ("polar", polar),
     ("pow.Scalar", pow_scalar),
@@ -353,7 +354,6 @@ _FULL_CONFIG = (
     ("zeros", zeros),
     ("zero_", zero_),
     ("zeros_like", zeros_like),
-    ("one_hot", one_hot),
 )
 
 # Cache mapping from function name -> list of _FULL_CONFIG entries for quick lookup

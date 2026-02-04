@@ -1,0 +1,10 @@
+{
+    "tests/test_tensor_constructor_ops.py::test_accuracy_one_hot": {
+        "params": {},
+        "result": "passed",
+        "opname": [
+            "one_hot"
+        ],
+        "skipped_reason": null
+    }
+}

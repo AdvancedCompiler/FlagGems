@@ -439,6 +439,7 @@ __all__ = [
     "normed_cumsum",
     "ones",
     "ones_like",
+    "one_hot",
     "pad",
     "per_token_group_quant_fp8",
     "polar",
@@ -538,5 +539,4 @@ __all__ = [
     "zeros",
     "zero_",
     "zeros_like",
-    "one_hot",
 ]
