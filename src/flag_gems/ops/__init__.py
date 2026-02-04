@@ -44,6 +44,7 @@ from flag_gems.ops.bitwise_or import (
 from flag_gems.ops.bitwise_right_shift import bitwise_right_shift
 from flag_gems.ops.bmm import bmm, bmm_out
 from flag_gems.ops.cat import cat
+from flag_gems.ops.ceil import ceil, ceil_, ceil_out
 from flag_gems.ops.celu import celu, celu_
 from flag_gems.ops.clamp import (
     clamp,
@@ -118,7 +119,7 @@ from flag_gems.ops.linspace import linspace
 from flag_gems.ops.log import log
 from flag_gems.ops.log_sigmoid import log_sigmoid
 from flag_gems.ops.log_softmax import log_softmax, log_softmax_backward
-from flag_gems.ops.logical_and import logical_and
+from flag_gems.ops.logical_and import logical_and, logical_and_
 from flag_gems.ops.logical_not import logical_not
 from flag_gems.ops.logical_or import logical_or, logical_or_
 from flag_gems.ops.logical_xor import logical_xor
@@ -289,6 +290,9 @@ __all__ = [
     "bmm",
     "bmm_out",
     "cat",
+    "ceil",
+    "ceil_",
+    "ceil_out",
     "celu",
     "celu_",
     "clamp",
@@ -389,6 +393,7 @@ __all__ = [
     "log_softmax",
     "log_softmax_backward",
     "logical_and",
+    "logical_and_",
     "logical_not",
     "logical_or",
     "logical_or_",
