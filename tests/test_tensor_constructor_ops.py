@@ -255,8 +255,6 @@ def test_accuracy_eye(shape, dtype):
         torch.eye(n, dtype=dtype, device="cpu" if TO_CPU else device),
     )
 
-    # referen https://github.com/pytorch/pytorch/blob/main/test/test_nn.py:9822
-
 
 @pytest.mark.one_hot
 def test_accuracy_one_hot():
