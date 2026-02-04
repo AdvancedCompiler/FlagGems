@@ -200,7 +200,7 @@ def test_generic_pointwise_benchmark_exclude_1d(op_name, torch_op, input_fn, dty
     [
         pytest.param(
             "triu_",
-            torch.triu,
+            torch.Tensor.triu_,
             unary_input_fn,
             FLOAT_DTYPES,
             marks=pytest.mark.triu_,
