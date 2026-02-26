@@ -298,6 +298,7 @@ _FULL_CONFIG = (
     ("rms_norm", rms_norm),
     ("rsqrt", rsqrt),
     ("rsqrt_", rsqrt_),
+    ("replication_pad3d", replication_pad3d),
     ("scaled_softmax_backward", scaled_softmax_backward),
     ("scaled_softmax_forward", scaled_softmax_forward),
     ("scatter.reduce", scatter),
