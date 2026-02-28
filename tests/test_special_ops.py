@@ -1891,29 +1891,19 @@ def test_accuracy_moe_align_block_size(
         num_tokens_post_pad, to_reference(num_tokens_post_pad_vllm), dtype=dtype
     )
 
+
 @pytest.mark.replication_pad3d
-@pytest.mark.parametrize("shape", [
-    (1, 3, 4, 8, 8),
-    (2, 16, 2, 3, 5),
-    (4, 8, 3, 4, 4),
-    (2, 1, 1, 2, 2)
-])
-@pytest.mark.parametrize("padding", [
-    1, 
-    (1, 2, 0, 1, 2, 0), 
-    2, 
-    (0, 0, 1, 2, 3, 0)
-])
+@pytest.mark.parametrize(
+    "shape", [(1, 3, 4, 8, 8), (2, 16, 2, 3, 5), (4, 8, 3, 4, 4), (2, 1, 1, 2, 2)]
+)
+@pytest.mark.parametrize("padding", [1, (1, 2, 0, 1, 2, 0), 2, (0, 0, 1, 2, 3, 0)])
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_replication_pad3d(shape, padding, dtype):
-
     x = torch.randn(shape, dtype=dtype).cuda()
 
     m_ref = torch.nn.ReplicationPad3d(padding)
     ref_out = m_ref(x.cpu()).cuda()
     with flag_gems.use_gems():
-
         res_out_functional = flag_gems.replication_pad3d(x, padding)
-        
 
     gems_assert_close(res_out_functional, ref_out, dtype, reduce_dim=1)

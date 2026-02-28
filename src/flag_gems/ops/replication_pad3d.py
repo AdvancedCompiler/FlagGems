@@ -2,6 +2,7 @@ import torch
 import triton
 import triton.language as tl
 
+
 @triton.autotune(
     configs=[
         triton.Config({"BLOCK_H": 16, "BLOCK_W": 64}, num_warps=4),
@@ -13,16 +14,31 @@ import triton.language as tl
 )
 @triton.jit
 def _ReplicationPad3d_kernel(
-    x_ptr, out_ptr,
-    D_in, H_in, W_in,
-    D_out, H_out, W_out,
-    pad_l, pad_t, pad_f,
-    stride_xn, stride_xc, stride_xd, stride_xh, stride_xw,
-    stride_on, stride_oc, stride_od, stride_oh, stride_ow,
+    x_ptr,
+    out_ptr,
+    D_in,
+    H_in,
+    W_in,
+    D_out,
+    H_out,
+    W_out,
+    pad_l,
+    pad_t,
+    pad_f,
+    stride_xn,
+    stride_xc,
+    stride_xd,
+    stride_xh,
+    stride_xw,
+    stride_on,
+    stride_oc,
+    stride_od,
+    stride_oh,
+    stride_ow,
     C,
-    BLOCK_H: tl.constexpr, BLOCK_W: tl.constexpr,
+    BLOCK_H: tl.constexpr,
+    BLOCK_W: tl.constexpr,
 ):
-
     pid_w = tl.program_id(0)
     pid_h = tl.program_id(1)
     pid_ncd = tl.program_id(2)
@@ -41,7 +57,7 @@ def _ReplicationPad3d_kernel(
 
     offs_h = pid_h * BLOCK_H + tl.arange(0, BLOCK_H)
     offs_w = pid_w * BLOCK_W + tl.arange(0, BLOCK_W)
-    
+
     iy = offs_h - pad_t
     iy = tl.where(iy < 0, 0, iy)
     iy = tl.where(iy > H_in - 1, H_in - 1, iy)
@@ -60,32 +76,44 @@ def _ReplicationPad3d_kernel(
 
 
 def replication_pad3d(x, padding):
-    
     if isinstance(padding, int):
         pad_l = pad_r = pad_t = pad_b = pad_f = pad_ba = padding
     else:
         pad_l, pad_r, pad_t, pad_b, pad_f, pad_ba = padding
 
     is_4d = x.ndim == 4
-    if is_4d: x = x.unsqueeze(0)
+    if is_4d:
+        x = x.unsqueeze(0)
 
     N, C, D_in, H_in, W_in = x.shape
-    D_out, H_out, W_out = D_in + pad_f + pad_ba, H_in + pad_t + pad_b, W_in + pad_l + pad_r
+    D_out, H_out, W_out = (
+        D_in + pad_f + pad_ba,
+        H_in + pad_t + pad_b,
+        W_in + pad_l + pad_r,
+    )
 
     out = torch.empty((N, C, D_out, H_out, W_out), device=x.device, dtype=x.dtype)
 
     grid = lambda META: (
         triton.cdiv(W_out, META["BLOCK_W"]),
         triton.cdiv(H_out, META["BLOCK_H"]),
-        N * C * D_out
+        N * C * D_out,
     )
-    
+
     _ReplicationPad3d_kernel[grid](
-        x, out,
-        D_in, H_in, W_in,
-        D_out, H_out, W_out,
-        pad_l, pad_t, pad_f,
-        *x.stride(), *out.stride(),
+        x,
+        out,
+        D_in,
+        H_in,
+        W_in,
+        D_out,
+        H_out,
+        W_out,
+        pad_l,
+        pad_t,
+        pad_f,
+        *x.stride(),
+        *out.stride(),
         C,
     )
 
