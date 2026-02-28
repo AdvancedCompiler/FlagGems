@@ -861,6 +861,7 @@ def test_perf_replication_pad3d():
         dtypes=FLOAT_DTYPES,
     )
     bench.set_gems(gems_wrapper)
+    bench.run()
 
 
 def torch_per_token_group_quant_fp8_ref(x, group_size, scale_ue8m0):
