@@ -1892,8 +1892,7 @@ def test_accuracy_moe_align_block_size(
     )
 
 
-# @pytest.mark.upsample_bicubic2d
-@pytest.mark.sdj
+@pytest.mark.upsample_bicubic2d
 @pytest.mark.parametrize(
     "N, C, H, W, outH, outW, align_corners, use_scale",
     [

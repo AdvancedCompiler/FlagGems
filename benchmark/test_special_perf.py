@@ -883,8 +883,7 @@ def test_perf_per_token_group_quant_fp8():
     bench.run()
 
 
-# @pytest.mark.upsample_bicubic2d
-@pytest.mark.sdj
+@pytest.mark.upsample_bicubic2d
 @pytest.mark.parametrize("align_corners", [False, True])
 def test_perf_upsample_bicubic2d(align_corners):
     def upsample_bicubic2d_input_fn(shape, dtype, device):
