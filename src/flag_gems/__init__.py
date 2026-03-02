@@ -357,6 +357,7 @@ _FULL_CONFIG = (
     ("zeros", zeros),
     ("zero_", zero_),
     ("zeros_like", zeros_like),
+    ("upsample_bicubic2d", upsample_bicubic2d),
 )
 
 # Cache mapping from function name -> list of _FULL_CONFIG entries for quick lookup

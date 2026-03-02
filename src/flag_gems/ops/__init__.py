@@ -219,6 +219,7 @@ from flag_gems.ops.trace import trace
 from flag_gems.ops.triu import triu, triu_
 from flag_gems.ops.uniform import uniform_
 from flag_gems.ops.unique import _unique2
+from flag_gems.ops.upsample_bicubic2d import upsample_bicubic2d
 from flag_gems.ops.upsample_bicubic2d_aa import _upsample_bicubic2d_aa
 from flag_gems.ops.upsample_nearest1d import upsample_nearest1d
 from flag_gems.ops.upsample_nearest2d import upsample_nearest2d
@@ -543,4 +544,5 @@ __all__ = [
     "zeros",
     "zero_",
     "zeros_like",
+    "upsample_bicubic2d",
 ]
