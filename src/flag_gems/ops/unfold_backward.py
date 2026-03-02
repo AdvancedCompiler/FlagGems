@@ -4,7 +4,7 @@ import triton.language as tl
 
 
 @triton.jit
-def _unfold_bwd_kernel(
+def _unfold_backward_kernel(
     grad_in_ptr,
     grad_out_ptr,
     numel_in,
@@ -65,7 +65,7 @@ def unfold_backward(
     BLOCK = 128
     grid = lambda meta: (triton.cdiv(numel_in, meta["BLOCK"]),)
 
-    _unfold_bwd_kernel[grid](
+    _unfold_backward_kernel[grid](
         grad_in,
         grad_out_f32,
         numel_in,
