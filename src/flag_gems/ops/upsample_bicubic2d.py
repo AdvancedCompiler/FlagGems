@@ -148,7 +148,6 @@ def upsample_bicubic2d(
     scales_w: float | None = None,
 ) -> torch.Tensor:
     scale_factors = (scales_h, scales_w)
-    # print(f"DEBUG: input={input.shape}, size={output_size}, align={align_corners}, scales={scale_factors}")
 
     if input.dim() != 4:
         raise ValueError("input must be a 4D tensor (N, C, H, W)")
