@@ -127,6 +127,27 @@ def nll_loss_input_fn(shape, cur_dtype, device):
         yield inp, target, {"weight": weight, "ignore_index": 1, "reduction": "none"}
 
 
+def nll_loss_nd_input_fn(shape, cur_dtype, device):
+    inp = generate_tensor_input(shape, cur_dtype, device)
+    inp = torch.nn.functional.log_softmax(inp, dim=1)
+
+    target_shape = list(shape)
+    del target_shape[1]
+    C = shape[1]
+
+    target = torch.randint(0, C, target_shape, dtype=torch.long, device=device)
+
+    yield inp, target
+    if Config.bench_level == BenchLevel.COMPREHENSIVE:
+        weight = torch.rand(C, dtype=cur_dtype, device=device)
+        for reduction in ["none", "mean", "sum"]:
+            yield inp, target, {
+                "weight": weight,
+                "ignore_index": 1,
+                "reduction": reduction,
+            }
+
+
 def cumsum_input_fn(shape, cur_dtype, device):
     inp = generate_tensor_input(shape, cur_dtype, device)
     yield inp, 1
@@ -195,6 +216,13 @@ def mse_loss_input_fn(shape, cur_dtype, device):
             marks=pytest.mark.nll_loss,
         ),
         pytest.param(
+            "nll_loss_nd",
+            torch.nn.functional.nll_loss,
+            nll_loss_nd_input_fn,
+            FLOAT_DTYPES,
+            marks=pytest.mark.nll_loss_nd,
+        ),
+        pytest.param(
             "mse_loss",
             torch.nn.functional.mse_loss,
             mse_loss_input_fn,
@@ -227,6 +255,17 @@ def test_nll_loss2d_benchmark():
     bench = GenericBenchmark4DOnly(
         input_fn=nll_loss_input_fn,
         op_name="nll_loss2d",
+        torch_op=torch.nn.functional.nll_loss,
+        dtypes=FLOAT_DTYPES,
+    )
+    bench.run()
+
+
+@pytest.mark.nll_loss_nd
+def test_nll_loss_nd_benchmark():
+    bench = GenericBenchmark4DOnly(
+        input_fn=nll_loss_nd_input_fn,
+        op_name="nll_loss_nd",
         torch_op=torch.nn.functional.nll_loss,
         dtypes=FLOAT_DTYPES,
     )
