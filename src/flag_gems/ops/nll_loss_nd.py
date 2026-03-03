@@ -30,6 +30,7 @@ def nll_loss_nd_kernel(
     stride_tgt_n,
     stride_tgt_s,
     ignore_index,
+    HAS_WEIGHT: tl.constexpr,
     BLOCK_SIZE: tl.constexpr,
     REDUCTION: tl.constexpr,
 ):
@@ -46,12 +47,15 @@ def nll_loss_nd_kernel(
 
     valid = mask & (t != ignore_index) & (t >= 0) & (t < C)
 
-    w = tl.load(weight_ptr + t, mask=valid, other=0.0).to(tl.float32)
-
     in_offsets = n * stride_in_n + t * stride_in_c + s * stride_in_s
     val = tl.load(input_ptr + in_offsets, mask=valid, other=0.0).to(tl.float32)
 
-    loss_val = tl.where(valid, -val * w, 0.0)
+    if HAS_WEIGHT:
+        w = tl.load(weight_ptr + t, mask=valid, other=0.0).to(tl.float32)
+        loss_val = tl.where(valid, -val * w, 0.0)
+    else:
+        w = tl.where(valid, 1.0, 0.0).to(tl.float32)
+        loss_val = tl.where(valid, -val, 0.0)
 
     if REDUCTION == 0:
         tl.store(out_buffer_ptr + offsets, loss_val, mask=mask)
@@ -108,8 +112,10 @@ def nll_loss_nd(
     stride_tgt_n, stride_tgt_s = tgt.stride()
 
     if weight is None:
-        w = torch.ones(C, device=input.device, dtype=torch.float32)
+        has_weight = False
+        w = input
     else:
+        has_weight = True
         if weight.numel() != C:
             raise ValueError(f"Weight shape {weight.shape} must be ({C},)")
         w = weight.contiguous().to(torch.float32)
@@ -139,6 +145,7 @@ def nll_loss_nd(
             stride_tgt_n,
             stride_tgt_s,
             ignore_index,
+            HAS_WEIGHT=has_weight,
             REDUCTION=reduction,
         )
 
@@ -168,6 +175,7 @@ def nll_loss_nd(
             stride_tgt_n,
             stride_tgt_s,
             ignore_index,
+            HAS_WEIGHT=has_weight,
             REDUCTION=reduction,
         )
 
