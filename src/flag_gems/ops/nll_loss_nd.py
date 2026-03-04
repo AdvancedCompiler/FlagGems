@@ -2,7 +2,11 @@ import torch
 import triton
 import triton.language as tl
 
+from flag_gems.runtime import torch_device_fn
+from flag_gems.utils import libentry
 
+
+@libentry()
 @triton.autotune(
     configs=[
         triton.Config({"BLOCK_SIZE": 64}, num_warps=2),
@@ -126,58 +130,58 @@ def nll_loss_nd(
         raise ValueError("reduction must be 0 ('none'), 1 ('mean'), or 2 ('sum')")
 
     grid = lambda meta: (triton.cdiv(total_elements, meta["BLOCK_SIZE"]),)
+    with torch_device_fn.device(input.device):
+        if reduction == 0:
+            # None
+            out = torch.empty((N, S), device=input.device, dtype=torch.float32)
 
-    if reduction == 0:
-        # None
-        out = torch.empty((N, S), device=input.device, dtype=torch.float32)
+            nll_loss_nd_kernel[grid](
+                inp,
+                tgt,
+                w,
+                out,
+                total_elements,
+                C,
+                S,
+                stride_in_n,
+                stride_in_c,
+                stride_in_s,
+                stride_tgt_n,
+                stride_tgt_s,
+                ignore_index,
+                HAS_WEIGHT=has_weight,
+                REDUCTION=reduction,
+            )
 
-        nll_loss_nd_kernel[grid](
-            inp,
-            tgt,
-            w,
-            out,
-            total_elements,
-            C,
-            S,
-            stride_in_n,
-            stride_in_c,
-            stride_in_s,
-            stride_tgt_n,
-            stride_tgt_s,
-            ignore_index,
-            HAS_WEIGHT=has_weight,
-            REDUCTION=reduction,
-        )
+            if target.dim() == input.dim() - 1:
+                res = out.view_as(target)
+            else:
+                res = out.reshape(target.shape)
+            return res.to(input.dtype)
 
-        if target.dim() == input.dim() - 1:
-            res = out.view_as(target)
         else:
-            res = out.reshape(target.shape)
-        return res.to(input.dtype)
+            if reduction == 1:
+                out_buffer = torch.zeros(4, device=input.device, dtype=torch.float32)
+            else:
+                out_buffer = torch.zeros(1, device=input.device, dtype=torch.float32)
 
-    else:
-        if reduction == 1:
-            out_buffer = torch.zeros(4, device=input.device, dtype=torch.float32)
-        else:
-            out_buffer = torch.zeros(1, device=input.device, dtype=torch.float32)
-
-        nll_loss_nd_kernel[grid](
-            inp,
-            tgt,
-            w,
-            out_buffer,
-            total_elements,
-            C,
-            S,
-            stride_in_n,
-            stride_in_c,
-            stride_in_s,
-            stride_tgt_n,
-            stride_tgt_s,
-            ignore_index,
-            HAS_WEIGHT=has_weight,
-            REDUCTION=reduction,
-        )
+            nll_loss_nd_kernel[grid](
+                inp,
+                tgt,
+                w,
+                out_buffer,
+                total_elements,
+                C,
+                S,
+                stride_in_n,
+                stride_in_c,
+                stride_in_s,
+                stride_tgt_n,
+                stride_tgt_s,
+                ignore_index,
+                HAS_WEIGHT=has_weight,
+                REDUCTION=reduction,
+            )
 
         out_val = out_buffer[3] if reduction == 1 else out_buffer[0]
         return out_val.to(input.dtype)
