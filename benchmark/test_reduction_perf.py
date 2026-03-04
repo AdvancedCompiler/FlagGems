@@ -134,18 +134,17 @@ def nll_loss_nd_input_fn(shape, cur_dtype, device):
     target_shape = list(shape)
     del target_shape[1]
     C = shape[1]
-
     target = torch.randint(0, C, target_shape, dtype=torch.long, device=device)
 
-    yield inp, target
     if Config.bench_level == BenchLevel.COMPREHENSIVE:
-        weight = torch.rand(C, dtype=cur_dtype, device=device)
-        for reduction in ["none", "mean", "sum"]:
-            yield inp, target, {
-                "weight": weight,
-                "ignore_index": 1,
-                "reduction": reduction,
-            }
+        weight_tensor = torch.rand(C, dtype=cur_dtype, device=device)
+        for weight in [weight_tensor, None]:
+            for reduction in ["none", "mean", "sum"]:
+                yield inp, target, {
+                    "weight": weight,
+                    "ignore_index": 1,
+                    "reduction": reduction,
+                }
 
 
 def cumsum_input_fn(shape, cur_dtype, device):
