@@ -216,13 +216,6 @@ def mse_loss_input_fn(shape, cur_dtype, device):
             marks=pytest.mark.nll_loss,
         ),
         pytest.param(
-            "nll_loss_nd",
-            torch.nn.functional.nll_loss,
-            nll_loss_nd_input_fn,
-            FLOAT_DTYPES,
-            marks=pytest.mark.nll_loss_nd,
-        ),
-        pytest.param(
             "mse_loss",
             torch.nn.functional.mse_loss,
             mse_loss_input_fn,
