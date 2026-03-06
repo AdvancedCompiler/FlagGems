@@ -9,14 +9,14 @@ from flag_gems.utils import libentry
 @libentry()
 @triton.autotune(
     configs=[
-        triton.Config({"BLOCK_SIZE": 64}, num_warps=2),
-        triton.Config({"BLOCK_SIZE": 128}, num_warps=4),
-        triton.Config({"BLOCK_SIZE": 256}, num_warps=4),
-        triton.Config({"BLOCK_SIZE": 512}, num_warps=8),
-        triton.Config({"BLOCK_SIZE": 1024}, num_warps=8),
-        triton.Config({"BLOCK_SIZE": 1024}, num_warps=8, num_stages=4),
+        triton.Config({"BLOCK_S": 64}, num_warps=2),
+        triton.Config({"BLOCK_S": 128}, num_warps=4),
+        triton.Config({"BLOCK_S": 256}, num_warps=4),
+        triton.Config({"BLOCK_S": 512}, num_warps=8),
+        triton.Config({"BLOCK_S": 1024}, num_warps=8),
+        triton.Config({"BLOCK_S": 1024}, num_warps=8, num_stages=4),
     ],
-    key=["total_elements"],
+    key=["S"],
     reset_to_zero=["out_buffer_ptr"],
 )
 @triton.jit
@@ -25,7 +25,6 @@ def nll_loss_nd_kernel(
     target_ptr,
     weight_ptr,
     out_buffer_ptr,
-    total_elements,
     C,
     S,
     stride_in_n,
@@ -35,23 +34,21 @@ def nll_loss_nd_kernel(
     stride_tgt_s,
     ignore_index,
     HAS_WEIGHT: tl.constexpr,
-    BLOCK_SIZE: tl.constexpr,
+    BLOCK_S: tl.constexpr,
     REDUCTION: tl.constexpr,
 ):
-    pid = tl.program_id(0)
-    block_start = pid * BLOCK_SIZE
-    offsets = block_start + tl.arange(0, BLOCK_SIZE)
-    mask = offsets < total_elements
+    pid_s = tl.program_id(0)
+    pid_n = tl.program_id(1)
 
-    n = offsets // S
-    s = offsets % S
+    s_offsets = pid_s * BLOCK_S + tl.arange(0, BLOCK_S)
+    mask_s = s_offsets < S
 
-    tgt_offsets = n * stride_tgt_n + s * stride_tgt_s
-    t = tl.load(target_ptr + tgt_offsets, mask=mask, other=ignore_index).to(tl.int32)
+    tgt_offsets = pid_n * stride_tgt_n + s_offsets * stride_tgt_s
+    t = tl.load(target_ptr + tgt_offsets, mask=mask_s, other=ignore_index).to(tl.int32)
 
-    valid = mask & (t != ignore_index) & (t >= 0) & (t < C)
+    valid = mask_s & (t != ignore_index) & (t >= 0) & (t < C)
 
-    in_offsets = n * stride_in_n + t * stride_in_c + s * stride_in_s
+    in_offsets = pid_n * stride_in_n + t * stride_in_c + s_offsets * stride_in_s
     val = tl.load(input_ptr + in_offsets, mask=valid, other=0.0).to(tl.float32)
 
     if HAS_WEIGHT:
@@ -60,13 +57,13 @@ def nll_loss_nd_kernel(
     else:
         w = tl.where(valid, 1.0, 0.0).to(tl.float32)
         loss_val = tl.where(valid, -val, 0.0)
-
+    # none
     if REDUCTION == 0:
-        tl.store(out_buffer_ptr + offsets, loss_val, mask=mask)
-
+        out_offset = pid_n * S + s_offsets
+        tl.store(out_buffer_ptr + out_offset, loss_val, mask=mask_s)
+    # mean
     else:
         block_loss_sum = tl.sum(loss_val, axis=0)
-
         if REDUCTION == 1:
             block_weight_sum = tl.sum(w, axis=0)
 
@@ -75,7 +72,9 @@ def nll_loss_nd_kernel(
 
             old_cnt = tl.atomic_add(out_buffer_ptr + 2, 1.0, sem="release")
 
-            if old_cnt == tl.num_programs(0) - 1.0:
+            total_programs = tl.num_programs(0) * tl.num_programs(1)
+
+            if old_cnt == total_programs - 1.0:
                 total_loss = tl.load(out_buffer_ptr + 0)
                 total_weight = tl.load(out_buffer_ptr + 1)
                 final_val = tl.where(
@@ -83,6 +82,7 @@ def nll_loss_nd_kernel(
                 )
 
                 tl.store(out_buffer_ptr + 3, final_val)
+        # Sum
         else:
             tl.atomic_add(out_buffer_ptr + 0, block_loss_sum, sem="relaxed")
 
@@ -122,17 +122,14 @@ def nll_loss_nd(
         has_weight = True
         if weight.numel() != C:
             raise ValueError(f"Weight shape {weight.shape} must be ({C},)")
-        w = weight.contiguous().to(torch.float32)
-
-    total_elements = N * S
+        w = weight.contiguous()
 
     if reduction not in [0, 1, 2]:
         raise ValueError("reduction must be 0 ('none'), 1 ('mean'), or 2 ('sum')")
 
-    grid = lambda meta: (triton.cdiv(total_elements, meta["BLOCK_SIZE"]),)
+    grid = lambda meta: (triton.cdiv(S, meta["BLOCK_S"]), N)
     with torch_device_fn.device(input.device):
         if reduction == 0:
-            # None
             out = torch.empty((N, S), device=input.device, dtype=torch.float32)
 
             nll_loss_nd_kernel[grid](
@@ -140,7 +137,6 @@ def nll_loss_nd(
                 tgt,
                 w,
                 out,
-                total_elements,
                 C,
                 S,
                 stride_in_n,
@@ -170,7 +166,6 @@ def nll_loss_nd(
                 tgt,
                 w,
                 out_buffer,
-                total_elements,
                 C,
                 S,
                 stride_in_n,
@@ -183,5 +178,5 @@ def nll_loss_nd(
                 REDUCTION=reduction,
             )
 
-        out_val = out_buffer[3] if reduction == 1 else out_buffer[0]
-        return out_val.to(input.dtype)
+            out_val = out_buffer[3] if reduction == 1 else out_buffer[0]
+            return out_val.to(input.dtype)
