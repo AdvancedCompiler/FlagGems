@@ -7,18 +7,6 @@ from flag_gems.utils import libentry
 
 
 @libentry()
-@triton.autotune(
-    configs=[
-        triton.Config({"BLOCK_S": 64}, num_warps=2),
-        triton.Config({"BLOCK_S": 128}, num_warps=4),
-        triton.Config({"BLOCK_S": 256}, num_warps=4),
-        triton.Config({"BLOCK_S": 512}, num_warps=8),
-        triton.Config({"BLOCK_S": 1024}, num_warps=8),
-        triton.Config({"BLOCK_S": 1024}, num_warps=8, num_stages=4),
-    ],
-    key=["S"],
-    reset_to_zero=["scratch_ptr"],
-)
 @triton.jit
 def nll_loss_nd_kernel(
     input_ptr,
@@ -35,8 +23,8 @@ def nll_loss_nd_kernel(
     stride_tgt_s,
     ignore_index,
     HAS_WEIGHT: tl.constexpr,
-    BLOCK_S: tl.constexpr,
     REDUCTION: tl.constexpr,
+    BLOCK_S: tl.constexpr = 1024,
 ):
     pid_s = tl.program_id(0)
     pid_n = tl.program_id(1)
