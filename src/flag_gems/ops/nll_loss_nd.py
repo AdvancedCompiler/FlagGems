@@ -17,14 +17,15 @@ from flag_gems.utils import libentry
         triton.Config({"BLOCK_S": 1024}, num_warps=8, num_stages=4),
     ],
     key=["S"],
-    reset_to_zero=["out_buffer_ptr"],
+    reset_to_zero=["scratch_ptr"],
 )
 @triton.jit
 def nll_loss_nd_kernel(
     input_ptr,
     target_ptr,
     weight_ptr,
-    out_buffer_ptr,
+    out_ptr,
+    scratch_ptr,
     C,
     S,
     stride_in_n,
@@ -57,38 +58,46 @@ def nll_loss_nd_kernel(
     else:
         w = tl.where(valid, 1.0, 0.0).to(tl.float32)
         loss_val = tl.where(valid, -val, 0.0)
+
     # none
     if REDUCTION == 0:
         out_offset = pid_n * S + s_offsets
         tl.store(
-            out_buffer_ptr + out_offset,
-            loss_val.to(out_buffer_ptr.dtype.element_ty),
-            mask=mask_s,
+            out_ptr + out_offset, loss_val.to(out_ptr.dtype.element_ty), mask=mask_s
         )
+
     # mean
     else:
         block_loss_sum = tl.sum(loss_val, axis=0)
         if REDUCTION == 1:
             block_weight_sum = tl.sum(w, axis=0)
 
-            tl.atomic_add(out_buffer_ptr + 0, block_loss_sum, sem="relaxed")
-            tl.atomic_add(out_buffer_ptr + 1, block_weight_sum, sem="relaxed")
+            tl.atomic_add(scratch_ptr + 0, block_loss_sum, sem="relaxed")
+            tl.atomic_add(scratch_ptr + 1, block_weight_sum, sem="relaxed")
 
-            old_cnt = tl.atomic_add(out_buffer_ptr + 2, 1.0, sem="release")
+            old_cnt = tl.atomic_add(scratch_ptr + 2, 1.0, sem="release")
 
             total_programs = tl.num_programs(0) * tl.num_programs(1)
 
             if old_cnt == total_programs - 1.0:
-                total_loss = tl.load(out_buffer_ptr + 0)
-                total_weight = tl.load(out_buffer_ptr + 1)
+                total_loss = tl.load(scratch_ptr + 0)
+                total_weight = tl.load(scratch_ptr + 1)
                 final_val = tl.where(
                     total_weight == 0.0, 0.0, total_loss / total_weight
                 )
 
-                tl.store(out_buffer_ptr + 3, final_val)
+                tl.store(out_ptr, final_val.to(out_ptr.dtype.element_ty))
+
         # Sum
         else:
-            tl.atomic_add(out_buffer_ptr + 0, block_loss_sum, sem="relaxed")
+            tl.atomic_add(scratch_ptr + 0, block_loss_sum, sem="relaxed")
+
+            old_cnt = tl.atomic_add(scratch_ptr + 2, 1.0, sem="release")
+            total_programs = tl.num_programs(0) * tl.num_programs(1)
+
+            if old_cnt == total_programs - 1.0:
+                total_loss = tl.load(scratch_ptr + 0)
+                tl.store(out_ptr, total_loss.to(out_ptr.dtype.element_ty))
 
 
 def nll_loss_nd(
@@ -135,12 +144,14 @@ def nll_loss_nd(
     with torch_device_fn.device(input.device):
         if reduction == 0:
             out = torch.empty((N, S), device=input.device, dtype=input.dtype)
+            scratch = torch.empty(1, device=input.device)
 
             nll_loss_nd_kernel[grid](
                 inp,
                 tgt,
                 w,
                 out,
+                scratch,
                 C,
                 S,
                 stride_in_n,
@@ -157,19 +168,18 @@ def nll_loss_nd(
                 res = out.view_as(target)
             else:
                 res = out.reshape(target.shape)
-            return res.to(input.dtype)
+            return res
 
         else:
-            if reduction == 1:
-                out_buffer = torch.zeros(4, device=input.device, dtype=torch.float32)
-            else:
-                out_buffer = torch.zeros(1, device=input.device, dtype=torch.float32)
+            out = torch.empty(1, device=input.device, dtype=input.dtype)
+            scratch = torch.zeros(4, device=input.device, dtype=torch.float32)
 
             nll_loss_nd_kernel[grid](
                 inp,
                 tgt,
                 w,
-                out_buffer,
+                out,
+                scratch,
                 C,
                 S,
                 stride_in_n,
@@ -182,5 +192,4 @@ def nll_loss_nd(
                 REDUCTION=reduction,
             )
 
-            out_val = out_buffer[3] if reduction == 1 else out_buffer[0]
-            return out_val.to(input.dtype)
+            return out[0]
