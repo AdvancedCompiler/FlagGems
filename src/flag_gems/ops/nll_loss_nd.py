@@ -60,7 +60,11 @@ def nll_loss_nd_kernel(
     # none
     if REDUCTION == 0:
         out_offset = pid_n * S + s_offsets
-        tl.store(out_buffer_ptr + out_offset, loss_val, mask=mask_s)
+        tl.store(
+            out_buffer_ptr + out_offset,
+            loss_val.to(out_buffer_ptr.dtype.element_ty),
+            mask=mask_s,
+        )
     # mean
     else:
         block_loss_sum = tl.sum(loss_val, axis=0)
@@ -130,7 +134,7 @@ def nll_loss_nd(
     grid = lambda meta: (triton.cdiv(S, meta["BLOCK_S"]), N)
     with torch_device_fn.device(input.device):
         if reduction == 0:
-            out = torch.empty((N, S), device=input.device, dtype=torch.float32)
+            out = torch.empty((N, S), device=input.device, dtype=input.dtype)
 
             nll_loss_nd_kernel[grid](
                 inp,
