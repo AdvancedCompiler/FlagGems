@@ -1903,6 +1903,7 @@ def test_accuracy_moe_align_block_size(
         ((7, 13), 1, 13, 3),
         ((6, 20), 1, 7, 4),
         ((2, 3, 17), -1, 9, 1),
+        ((2, 17), 1, 4, 6),
     ],
 )
 @pytest.mark.parametrize("dtype", [torch.float16, torch.float32, torch.bfloat16])
