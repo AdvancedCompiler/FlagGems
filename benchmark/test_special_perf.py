@@ -904,6 +904,7 @@ def test_perf_unfold_backward():
                 ((7, 13), 1, 13, 3),
                 ((6, 20), 1, 7, 4),
                 ((2, 3, 17), -1, 9, 1),
+                ((2, 17), 1, 4, 6),
             ]
 
         def set_more_shapes(self):
