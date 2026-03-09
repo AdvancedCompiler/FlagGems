@@ -60,7 +60,7 @@ def nll_loss_nd_kernel(
         if REDUCTION == 1:
             block_weight_sum = tl.sum(w, axis=0)
 
-            tl.atomic_add(scratch_ptr + 0, block_loss_sum, sem="relaxed")
+            tl.atomic_add(scratch_ptr, block_loss_sum, sem="relaxed")
             tl.atomic_add(scratch_ptr + 1, block_weight_sum, sem="relaxed")
 
             old_cnt = tl.atomic_add(scratch_ptr + 2, 1.0, sem="release")
@@ -68,7 +68,7 @@ def nll_loss_nd_kernel(
             total_programs = tl.num_programs(0) * tl.num_programs(1)
 
             if old_cnt == total_programs - 1.0:
-                total_loss = tl.load(scratch_ptr + 0)
+                total_loss = tl.load(scratch_ptr)
                 total_weight = tl.load(scratch_ptr + 1)
                 final_val = tl.where(
                     total_weight == 0.0, 0.0, total_loss / total_weight
@@ -78,13 +78,13 @@ def nll_loss_nd_kernel(
 
         # Sum
         else:
-            tl.atomic_add(scratch_ptr + 0, block_loss_sum, sem="relaxed")
+            tl.atomic_add(scratch_ptr, block_loss_sum, sem="relaxed")
 
             old_cnt = tl.atomic_add(scratch_ptr + 2, 1.0, sem="release")
             total_programs = tl.num_programs(0) * tl.num_programs(1)
 
             if old_cnt == total_programs - 1.0:
-                total_loss = tl.load(scratch_ptr + 0)
+                total_loss = tl.load(scratch_ptr)
                 tl.store(out_ptr, total_loss.to(out_ptr.dtype.element_ty))
 
 
@@ -160,7 +160,7 @@ def nll_loss_nd(
 
         else:
             out = torch.empty(1, device=input.device, dtype=input.dtype)
-            scratch = torch.zeros(4, device=input.device, dtype=torch.float32)
+            scratch = torch.zeros(3, device=input.device, dtype=torch.float32)
 
             nll_loss_nd_kernel[grid](
                 inp,
