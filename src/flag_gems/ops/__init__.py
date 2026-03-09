@@ -529,6 +529,7 @@ __all__ = [
     "true_divide_",
     "true_divide_out",
     "uniform_",
+    "upsample_bicubic2d",
     "upsample_nearest1d",
     "upsample_nearest2d",
     "var_mean",
@@ -544,5 +545,4 @@ __all__ = [
     "zeros",
     "zero_",
     "zeros_like",
-    "upsample_bicubic2d",
 ]
