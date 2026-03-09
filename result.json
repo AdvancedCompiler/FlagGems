@@ -1,0 +1,3080 @@
+{
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype0-shape0-True-mean]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype0-shape0-True-none]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype0-shape0-True-sum]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype0-shape0-False-mean]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype0-shape0-False-none]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype0-shape0-False-sum]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype0-shape1-True-mean]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype0-shape1-True-none]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype0-shape1-True-sum]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype0-shape1-False-mean]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype0-shape1-False-none]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype0-shape1-False-sum]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype0-shape2-True-mean]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype0-shape2-True-none]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype0-shape2-True-sum]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype0-shape2-False-mean]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype0-shape2-False-none]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype0-shape2-False-sum]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype1-shape0-True-mean]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float32",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype1-shape0-True-none]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float32",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype1-shape0-True-sum]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float32",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype1-shape0-False-mean]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float32",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype1-shape0-False-none]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float32",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype1-shape0-False-sum]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float32",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype1-shape1-True-mean]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float32",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype1-shape1-True-none]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float32",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype1-shape1-True-sum]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float32",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype1-shape1-False-mean]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float32",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype1-shape1-False-none]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float32",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype1-shape1-False-sum]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float32",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype1-shape2-True-mean]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float32",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype1-shape2-True-none]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float32",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype1-shape2-True-sum]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float32",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype1-shape2-False-mean]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float32",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype1-shape2-False-none]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float32",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype1-shape2-False-sum]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.float32",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype2-shape0-True-mean]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype2-shape0-True-none]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype2-shape0-True-sum]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype2-shape0-False-mean]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype2-shape0-False-none]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype2-shape0-False-sum]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype2-shape1-True-mean]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype2-shape1-True-none]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype2-shape1-True-sum]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype2-shape1-False-mean]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype2-shape1-False-none]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype2-shape1-False-sum]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype2-shape2-True-mean]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype2-shape2-True-none]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype2-shape2-True-sum]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype2-shape2-False-mean]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype2-shape2-False-none]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[1-dtype2-shape2-False-sum]": {
+        "params": {
+            "ignore_index": 1,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype0-shape0-True-mean]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype0-shape0-True-none]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype0-shape0-True-sum]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype0-shape0-False-mean]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype0-shape0-False-none]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype0-shape0-False-sum]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype0-shape1-True-mean]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype0-shape1-True-none]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype0-shape1-True-sum]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype0-shape1-False-mean]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype0-shape1-False-none]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype0-shape1-False-sum]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype0-shape2-True-mean]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype0-shape2-True-none]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype0-shape2-True-sum]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype0-shape2-False-mean]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype0-shape2-False-none]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype0-shape2-False-sum]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype1-shape0-True-mean]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float32",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype1-shape0-True-none]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float32",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype1-shape0-True-sum]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float32",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype1-shape0-False-mean]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float32",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype1-shape0-False-none]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float32",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype1-shape0-False-sum]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float32",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype1-shape1-True-mean]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float32",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype1-shape1-True-none]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float32",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype1-shape1-True-sum]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float32",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype1-shape1-False-mean]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float32",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype1-shape1-False-none]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float32",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype1-shape1-False-sum]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float32",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype1-shape2-True-mean]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float32",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype1-shape2-True-none]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float32",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype1-shape2-True-sum]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float32",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype1-shape2-False-mean]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float32",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype1-shape2-False-none]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float32",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype1-shape2-False-sum]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.float32",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype2-shape0-True-mean]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype2-shape0-True-none]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype2-shape0-True-sum]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype2-shape0-False-mean]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype2-shape0-False-none]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype2-shape0-False-sum]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype2-shape1-True-mean]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype2-shape1-True-none]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype2-shape1-True-sum]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype2-shape1-False-mean]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype2-shape1-False-none]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype2-shape1-False-sum]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype2-shape2-True-mean]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype2-shape2-True-none]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype2-shape2-True-sum]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype2-shape2-False-mean]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype2-shape2-False-none]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[200-dtype2-shape2-False-sum]": {
+        "params": {
+            "ignore_index": 200,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype0-shape0-True-mean]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype0-shape0-True-none]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype0-shape0-True-sum]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype0-shape0-False-mean]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype0-shape0-False-none]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype0-shape0-False-sum]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype0-shape1-True-mean]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype0-shape1-True-none]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype0-shape1-True-sum]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype0-shape1-False-mean]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype0-shape1-False-none]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype0-shape1-False-sum]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype0-shape2-True-mean]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype0-shape2-True-none]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype0-shape2-True-sum]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype0-shape2-False-mean]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype0-shape2-False-none]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype0-shape2-False-sum]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype1-shape0-True-mean]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float32",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype1-shape0-True-none]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float32",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype1-shape0-True-sum]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float32",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype1-shape0-False-mean]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float32",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype1-shape0-False-none]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float32",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype1-shape0-False-sum]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float32",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype1-shape1-True-mean]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float32",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype1-shape1-True-none]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float32",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype1-shape1-True-sum]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float32",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype1-shape1-False-mean]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float32",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype1-shape1-False-none]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float32",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype1-shape1-False-sum]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float32",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype1-shape2-True-mean]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float32",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype1-shape2-True-none]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float32",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype1-shape2-True-sum]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float32",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype1-shape2-False-mean]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float32",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype1-shape2-False-none]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float32",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype1-shape2-False-sum]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.float32",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype2-shape0-True-mean]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype2-shape0-True-none]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype2-shape0-True-sum]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype2-shape0-False-mean]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype2-shape0-False-none]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype2-shape0-False-sum]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                16,
+                50,
+                128
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype2-shape1-True-mean]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype2-shape1-True-none]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype2-shape1-True-sum]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype2-shape1-False-mean]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype2-shape1-False-none]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype2-shape1-False-sum]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                4,
+                3,
+                5,
+                5
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype2-shape2-True-mean]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype2-shape2-True-none]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype2-shape2-True-sum]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": true,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype2-shape2-False-mean]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "mean"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype2-shape2-False-none]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "none"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    },
+    "tests/test_reduction_ops.py::test_accuracy_nll_loss_nd[-100-dtype2-shape2-False-sum]": {
+        "params": {
+            "ignore_index": -100,
+            "dtype": "torch.bfloat16",
+            "shape": [
+                2,
+                10,
+                8,
+                16,
+                16
+            ],
+            "weight": false,
+            "reduction": "sum"
+        },
+        "result": "passed",
+        "opname": [
+            "nll_loss_nd"
+        ],
+        "skipped_reason": null
+    }
+}
