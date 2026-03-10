@@ -1,21 +1,22 @@
+import logging
+
 import torch
 import triton
 import triton.language as tl
 
+from flag_gems import runtime
+from flag_gems.utils import libentry, libtuner
 
-@triton.autotune(
-    configs=[
-        triton.Config({"BLOCK_SIZE": 64}, num_warps=8),
-        triton.Config({"BLOCK_SIZE": 256}, num_warps=8),
-        triton.Config({"BLOCK_SIZE": 128}, num_warps=8),
-        triton.Config({"BLOCK_SIZE": 512}, num_warps=8),
-        triton.Config({"BLOCK_SIZE": 1024}, num_warps=8),
-        triton.Config({"BLOCK_SIZE": 2048}, num_warps=8),
-    ],
+logger = logging.getLogger(__name__)
+
+
+@libentry()
+@libtuner(
+    configs=runtime.get_tuned_config("conj_physical"),
     key=["n_elements"],
 )
 @triton.jit
-def conj_fast_kernel(in_ptr, out_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
+def conj_physical_kernel(in_ptr, out_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
     pid = tl.program_id(0)
     offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     mask = offsets < n_elements
@@ -29,6 +30,7 @@ def conj_fast_kernel(in_ptr, out_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
 
 
 def conj_physical(input: torch.Tensor) -> torch.Tensor:
+    logger.debug("GEMS Conj_Physical")
     if not input.is_complex():
         return input
 
@@ -40,6 +42,6 @@ def conj_physical(input: torch.Tensor) -> torch.Tensor:
 
     grid = lambda meta: (triton.cdiv(n_elements, meta["BLOCK_SIZE"]),)
 
-    conj_fast_kernel[grid](in_real_ptr, out_real_ptr, n_elements)
+    conj_physical_kernel[grid](in_real_ptr, out_real_ptr, n_elements)
 
     return output
