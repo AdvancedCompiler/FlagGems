@@ -1,8 +1,11 @@
+import logging
 import math
 
 import torch
 import triton
 import triton.language as tl
+
+logger = logging.getLogger(__name__)
 
 
 @triton.jit
@@ -62,6 +65,7 @@ def upsample_linear1d(
     align_corners: bool,
     scales: float = None,
 ):
+    logger.debug("GEMS UPSAMPLE LINEAR1D")
     assert self.ndim == 3, "Input must be [N, C, W]"
     assert self.is_cuda
 
