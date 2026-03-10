@@ -17,13 +17,12 @@ def bincount_kernel(
     pid = tl.program_id(0)
     offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     mask = offsets < n_elements
-
     vals = tl.load(input_ptr + offsets, mask=mask, other=0)
     tl.atomic_add(output_ptr + vals, 1, mask=mask)
 
 
 @triton.jit
-def bincount_weights_kernel(
+def bincount_weights_fp32_kernel(
     input_ptr,
     weights_ptr,
     output_ptr,
@@ -33,10 +32,28 @@ def bincount_weights_kernel(
     pid = tl.program_id(0)
     offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     mask = offsets < n_elements
-
     vals = tl.load(input_ptr + offsets, mask=mask, other=0)
     w = tl.load(weights_ptr + offsets, mask=mask, other=0.0)
-    tl.atomic_add(output_ptr + vals, w, mask=mask)
+
+    w_fp32 = w.to(tl.float32)
+    tl.atomic_add(output_ptr + vals, w_fp32, mask=mask)
+
+
+@triton.jit
+def bincount_weights_fp64_kernel(
+    input_ptr,
+    weights_ptr,
+    output_ptr,
+    n_elements,
+    BLOCK_SIZE: tl.constexpr,
+):
+    pid = tl.program_id(0)
+    offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+    mask = offsets < n_elements
+    vals = tl.load(input_ptr + offsets, mask=mask, other=0)
+    w = tl.load(weights_ptr + offsets, mask=mask, other=0.0)
+    w_fp64 = w.to(tl.float64)
+    tl.atomic_add(output_ptr + vals, w_fp64, mask=mask)
 
 
 def bincount(input, weights=None, minlength=0):
@@ -61,32 +78,43 @@ def bincount(input, weights=None, minlength=0):
     input_contig = input.contiguous()
 
     BLOCK_SIZE = 1024
+    num_warps = 4
     grid = (triton.cdiv(n, BLOCK_SIZE),)
 
     if weights is not None:
+        weights_contig = weights.contiguous()
         out_dtype = weights.dtype
 
-        output_fp64 = torch.zeros(output_size, dtype=torch.float64, device=input.device)
-
-        weights_fp64 = weights.contiguous().to(dtype=torch.float64, device=input.device)
-
-        bincount_weights_kernel[grid](
-            input_contig,
-            weights_fp64,
-            output_fp64,
-            n,
-            BLOCK_SIZE=BLOCK_SIZE,
-        )
-
-        output = output_fp64.to(dtype=out_dtype, device=input.device)
+        if out_dtype == torch.float64:
+            output = torch.zeros(output_size, dtype=torch.float64, device=input.device)
+            bincount_weights_fp64_kernel[grid](
+                input_contig,
+                weights_contig,
+                output,
+                n,
+                BLOCK_SIZE=BLOCK_SIZE,
+                num_warps=num_warps,
+            )
+        else:
+            output = torch.zeros(output_size, dtype=torch.float32, device=input.device)
+            bincount_weights_fp32_kernel[grid](
+                input_contig,
+                weights_contig,
+                output,
+                n,
+                BLOCK_SIZE=BLOCK_SIZE,
+                num_warps=num_warps,
+            )
+            if out_dtype != torch.float32:
+                output = output.to(dtype=out_dtype)
     else:
         output = torch.zeros(output_size, dtype=torch.int64, device=input.device)
-
         bincount_kernel[grid](
             input_contig,
             output,
             n,
             BLOCK_SIZE=BLOCK_SIZE,
+            num_warps=num_warps,
         )
 
     return output
