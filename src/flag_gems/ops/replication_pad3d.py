@@ -1,19 +1,22 @@
+import logging
+
 import torch
 import triton
 import triton.language as tl
 
+from flag_gems import runtime
+from flag_gems.utils import libentry, libtuner
 
-@triton.autotune(
-    configs=[
-        triton.Config({"BLOCK_H": 16, "BLOCK_W": 64}, num_warps=4),
-        triton.Config({"BLOCK_H": 32, "BLOCK_W": 32}, num_warps=4),
-        triton.Config({"BLOCK_H": 64, "BLOCK_W": 16}, num_warps=4),
-        triton.Config({"BLOCK_H": 8, "BLOCK_W": 128}, num_warps=8),
-    ],
+logger = logging.getLogger(__name__)
+
+
+@libentry()
+@libtuner(
+    configs=runtime.get_tuned_config("replication_pad3d"),
     key=["H_out", "W_out"],
 )
 @triton.jit
-def _ReplicationPad3d_kernel(
+def replicationpad3d_kernel(
     x_ptr,
     out_ptr,
     D_in,
@@ -76,6 +79,7 @@ def _ReplicationPad3d_kernel(
 
 
 def replication_pad3d(x, padding):
+    logger.debug("GEMS Replication_Pad3d")
     if isinstance(padding, int):
         pad_l = pad_r = pad_t = pad_b = pad_f = pad_ba = padding
     else:
@@ -100,7 +104,7 @@ def replication_pad3d(x, padding):
         N * C * D_out,
     )
 
-    _ReplicationPad3d_kernel[grid](
+    replicationpad3d_kernel[grid](
         x,
         out,
         D_in,
