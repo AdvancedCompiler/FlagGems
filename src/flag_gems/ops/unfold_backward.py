@@ -1,6 +1,10 @@
+import logging
+
 import torch
 import triton
 import triton.language as tl
+
+logger = logging.getLogger(__name__)
 
 
 @triton.jit
@@ -40,6 +44,7 @@ def _unfold_backward_kernel(
 def unfold_backward(
     grad_in: torch.Tensor, input_sizes, dim: int, size: int, step: int
 ) -> torch.Tensor:
+    logger.debug("GEMS UNFOLD BACKWARD")
     if step <= 0:
         raise ValueError("step must be > 0")
 

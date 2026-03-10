@@ -1905,8 +1905,7 @@ def test_accuracy_moe_align_block_size(
     )
 
 
-@pytest.mark.unfold_backward
-@pytest.mark.label("unfold_backward")
+@pytest.mark.unfold
 @pytest.mark.parametrize(
     "input_sizes, dim, size, step",
     [

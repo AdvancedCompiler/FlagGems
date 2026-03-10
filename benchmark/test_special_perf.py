@@ -883,7 +883,7 @@ def test_perf_per_token_group_quant_fp8():
     bench.run()
 
 
-@pytest.mark.unfold_backward
+@pytest.mark.unfold
 def test_perf_unfold_backward():
     def unfold_backward_input_fn(config, dtype, device):
         input_sizes, dim, size, step = config
