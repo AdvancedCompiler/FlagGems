@@ -1947,6 +1947,8 @@ def test_replication_pad3d(shape, padding, dtype):
         res_out_functional = flag_gems.replication_pad3d(x, padding)
 
     gems_assert_close(res_out_functional, ref_out, dtype, reduce_dim=1)
+
+
 @pytest.mark.unfold
 @pytest.mark.parametrize(
     "input_sizes, dim, size, step",
