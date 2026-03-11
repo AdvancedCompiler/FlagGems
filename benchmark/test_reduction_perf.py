@@ -253,9 +253,26 @@ def test_nll_loss2d_benchmark():
     bench.run()
 
 
+class NLLLossNDBenchmark(GenericBenchmark):
+    def get_input_iter(self, cur_dtype) -> Generator:
+        shapes = [
+            (64, 64),
+            (256, 256),
+            (10000, 65536),
+            (32, 128, 512),
+            (64, 64, 4, 8),
+            (256, 256, 4, 8),
+            (4096, 4096, 4, 8),
+            (64, 64, 8, 4, 8),
+        ]
+
+        for shape in shapes:
+            yield from self.input_fn(shape, cur_dtype, self.device)
+
+
 @pytest.mark.nll_loss_nd
 def test_nll_loss_nd_benchmark():
-    bench = GenericBenchmark4DOnly(
+    bench = NLLLossNDBenchmark(
         input_fn=nll_loss_nd_input_fn,
         op_name="nll_loss_nd",
         torch_op=torch.nn.functional.nll_loss,
