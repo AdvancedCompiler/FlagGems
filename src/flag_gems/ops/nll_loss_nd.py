@@ -249,7 +249,7 @@ def nll_loss_nd_forward(
                 out = out[0]
 
                 if reduction == 1:
-                    total_weight = scratch[1].to(input.dtype)
+                    total_weight = scratch[1]
                 else:
                     total_weight = torch.empty(
                         [], device=input.device, dtype=input.dtype
