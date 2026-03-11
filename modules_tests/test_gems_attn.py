@@ -160,7 +160,6 @@ def test_flash_attn_varlen_func(
             fa_version=2,
         )
 
-        # 数值对比
         torch.testing.assert_close(
             output, vllm_out, atol=2e-2, rtol=1e-2
         ), f"max abs diff vs vLLM: {torch.max(torch.abs(output - vllm_out))}"
@@ -296,7 +295,6 @@ def test_flash_attn_varlen_func_none_paged(
             fa_version=2,
         )
 
-        # 数值对比
         torch.testing.assert_close(
             output, vllm_out, atol=2e-2, rtol=1e-2
         ), f"max abs diff vs vLLM: {torch.max(torch.abs(output - vllm_out))}"
