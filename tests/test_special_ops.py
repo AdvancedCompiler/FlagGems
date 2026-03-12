@@ -564,9 +564,12 @@ def test_embedding_backward(
     "padding_idx, scale_grad_by_freq", [(-1, False), (0, True), (5, False)]
 )
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+@pytest.mark.parametrize("seed", [42])
 def test_embedding_dense_backward(
-    Batch, M, N, embeddingsize, padding_idx, scale_grad_by_freq, dtype
+    Batch, M, N, embeddingsize, padding_idx, scale_grad_by_freq, dtype, seed
 ):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
     grad_output = torch.randn((Batch, M, N), device=flag_gems.device, dtype=dtype)
     indices = torch.randint(
         0, embeddingsize, (Batch, M), device=flag_gems.device, dtype=torch.long
@@ -578,12 +581,19 @@ def test_embedding_dense_backward(
     ref_grad_output = to_reference(grad_output)
     ref_indices = to_reference(indices)
     ref_out = torch.ops.aten.embedding_dense_backward(
-        ref_grad_output, ref_indices, num_weights, padding_idx, scale_grad_by_freq
+        ref_grad_output.cpu(),
+        ref_indices.cpu(),
+        num_weights,
+        padding_idx,
+        scale_grad_by_freq,
     )
     with flag_gems.use_gems():
         res_out = torch.ops.aten.embedding_dense_backward(
             grad_output, indices, num_weights, padding_idx, scale_grad_by_freq
         )
+    # res_out = torch.ops.aten.embedding_dense_backward(
+    # grad_output, indices, num_weights, padding_idx, scale_grad_by_freq)
+
     gems_assert_close(res_out, ref_out, dtype)
 
 

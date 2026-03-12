@@ -1,6 +1,10 @@
+import logging
+
 import torch
 import triton
 import triton.language as tl
+
+logger = logging.getLogger(__name__)
 
 
 @triton.jit
@@ -68,9 +72,11 @@ def _embedding_dense_backward_kernel_scale_by_freq(
     valid = (idx != padding_idx) & (idx >= 0) & (idx < num_weights)
 
     go_ptrs = grad_output_ptr + pid_n * EMBED_DIM + offs_d
-    go = tl.load(go_ptrs, mask=mask_d, other=0.0).to(tl.float32)
+    # go = tl.load(go_ptrs, mask=mask_d, other=0.0).to(tl.float32)
+    go = tl.load(go_ptrs, mask=mask_d, other=0.0)
 
-    cnt = tl.load(counts_ptr + idx, mask=valid, other=1).to(tl.float32)
+    # cnt = tl.load(counts_ptr + idx, mask=valid, other=1).to(tl.float32)
+    cnt = tl.load(counts_ptr + idx, mask=valid, other=1)
     go = go / cnt
 
     gw_ptrs = grad_weight_ptr + idx * EMBED_DIM + offs_d
@@ -85,6 +91,7 @@ def embedding_dense_backward(
     padding_idx: int,
     scale_grad_by_freq: bool,
 ):
+    logger.debug("GEMS: embedding_dense_backward")
     assert indices.dtype in (
         torch.int32,
         torch.int64,
