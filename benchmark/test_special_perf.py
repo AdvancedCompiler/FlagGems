@@ -927,6 +927,7 @@ def test_perf_upsample_bicubic2d(align_corners):
         torch_op=torch._C._nn.upsample_bicubic2d,
         dtypes=FLOAT_DTYPES,
     )
+    bench.run()
 
 
 @pytest.mark.unfold
