@@ -562,12 +562,8 @@ def test_perf_scaled_softmax_backward():
     bench.run()
 
 
-def _allow_shape(shape):
-    return shape[0] <= 1_000_000
-
-
 def bincount_input_fn(shape, dtype, device):
-    if not _allow_shape(shape):
+    if shape[0] > 1_000_000:
         return
 
     n = shape[0]
@@ -580,7 +576,7 @@ def bincount_input_fn(shape, dtype, device):
 
 
 def bincount_weighted_input_fn(shape, dtype, device):
-    if not _allow_shape(shape):
+    if shape[0] > 1_000_000:
         return
 
     n = shape[0]

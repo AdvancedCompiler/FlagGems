@@ -10,12 +10,11 @@ logger = logging.getLogger(__name__)
 def _select_params(n):
     if n <= 256:
         return 256, 2
-    elif n <= 1024:
+    if n <= 1024:
         return 256, 4
-    elif n <= 4096:
+    if n <= 4096:
         return 512, 4
-    else:
-        return 1024, 4
+    return 1024, 4
 
 
 def _estimate_output_size(n, minlength):
