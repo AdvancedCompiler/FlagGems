@@ -581,8 +581,8 @@ def test_embedding_dense_backward(
     ref_grad_output = to_reference(grad_output)
     ref_indices = to_reference(indices)
     ref_out = torch.ops.aten.embedding_dense_backward(
-        ref_grad_output.cpu(),
-        ref_indices.cpu(),
+        ref_grad_output,
+        ref_indices,
         num_weights,
         padding_idx,
         scale_grad_by_freq,
