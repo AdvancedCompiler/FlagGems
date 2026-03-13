@@ -832,6 +832,32 @@ def test_upsample_bicubic2d_aa(dtype, shape, scale, align_corners):
     gems_assert_close(res_out, ref_out, dtype, reduce_dim=reduce_dim)
 
 
+@pytest.mark.upsample_linear1d
+@pytest.mark.parametrize("align_corners", [False, True])
+@pytest.mark.parametrize("scale", [2, 2.5, 0.3, 0.7])
+@pytest.mark.parametrize("shape", UPSAMPLE_SHAPES_1D)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_upsample_linear1d(dtype, shape, scale, align_corners):
+    input = torch.randn(shape, dtype=dtype, device=flag_gems.device)
+    ref_i = to_reference(input).to(torch.float32)
+    output_size = [int(ref_i.shape[i + 2] * scale) for i in range(1)]
+
+    ref_out = torch._C._nn.upsample_linear1d(
+        ref_i,
+        output_size=output_size,
+        align_corners=align_corners,
+    ).to(dtype)
+
+    with flag_gems.use_gems():
+        res_out = torch._C._nn.upsample_linear1d(
+            input,
+            output_size=output_size,
+            align_corners=align_corners,
+        )
+
+    gems_assert_close(res_out, ref_out, dtype)
+
+
 @pytest.mark.upsample_nearest1d
 @pytest.mark.parametrize("scale", [2, 2.5, 0.3, 0.7])
 @pytest.mark.parametrize("shape", UPSAMPLE_SHAPES_1D)
@@ -1925,3 +1951,34 @@ def test_conj_physical(shape, is_complex, dtype):
         res_out = torch.conj_physical(input)
 
     gems_assert_close(res_out, ref_out, out_dtype, reduce_dim=1)
+
+
+@pytest.mark.unfold
+@pytest.mark.parametrize(
+    "input_sizes, dim, size, step",
+    [
+        ((32, 64), 1, 16, 16),
+        ((16, 33), 0, 5, 2),
+        ((4, 8, 12), -1, 6, 4),
+        ((7, 13), 1, 13, 3),
+        ((6, 20), 1, 7, 4),
+        ((2, 3, 17), -1, 9, 1),
+        ((2, 17), 1, 4, 6),
+    ],
+)
+@pytest.mark.parametrize("dtype", [torch.float16, torch.float32, torch.bfloat16])
+def test_unfold_backward(input_sizes, dim, size, step, dtype):
+    d = dim % len(input_sizes)
+    num_windows = (input_sizes[d] - size) // step + 1
+    grad_shape = (
+        list(input_sizes[:d]) + [num_windows] + list(input_sizes[d + 1 :]) + [size]
+    )
+
+    grad_in = torch.randn(grad_shape, dtype=dtype, device=device)
+
+    ref_grad = to_reference(grad_in, True)
+    ref_out = torch.ops.aten.unfold_backward(ref_grad, input_sizes, dim, size, step)
+
+    with flag_gems.use_gems():
+        res_out = flag_gems.unfold_backward(grad_in, input_sizes, dim, size, step)
+    gems_assert_close(res_out, ref_out, dtype, reduce_dim=size)
