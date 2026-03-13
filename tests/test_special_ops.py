@@ -856,9 +856,9 @@ def test_upsample_nearest2d(dtype, shape, scale):
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_upsample_nearest3d(dtype, shape, scale):
     input = torch.randn(shape, dtype=dtype, device=flag_gems.device)
-    ref_i = to_reference(input).to(torch.float32)
+    ref_i = to_reference(input)
     output_size = [int(input.shape[i + 2] * scale[i]) for i in range(3)]
-    ref_out = torch._C._nn.upsample_nearest3d(ref_i, output_size=output_size).to(dtype)
+    ref_out = torch._C._nn.upsample_nearest3d(ref_i, output_size=output_size)
     with flag_gems.use_gems():
         res_out = torch._C._nn.upsample_nearest3d(input, output_size=output_size)
     gems_assert_close(res_out, ref_out, dtype)
