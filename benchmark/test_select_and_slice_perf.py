@@ -362,7 +362,7 @@ def slice_backward_gbps(args, latency):
     return total_bytes / latency / 1e9
 
 
-@pytest.mark.slice_backward
+@pytest.mark.slice
 def test_slice_backward_perf():
     def slice_backward_input_fn(shape, dtype, device):
         dim = 0 if len(shape) == 1 else 1
