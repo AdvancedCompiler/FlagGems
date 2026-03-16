@@ -1110,7 +1110,7 @@ SLICE_BACKWARD_SHAPES = [
 ]
 
 
-@pytest.mark.slice_backward
+@pytest.mark.slice
 @pytest.mark.parametrize("shape", SLICE_BACKWARD_SHAPES)
 @pytest.mark.parametrize("dim", [0, 1, -1])
 @pytest.mark.parametrize("start", [0, 16])
