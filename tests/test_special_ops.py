@@ -2022,6 +2022,8 @@ def test_conj_physical(shape, is_complex, dtype):
         res_out = torch.conj_physical(input)
 
     gems_assert_close(res_out, ref_out, out_dtype, reduce_dim=1)
+
+
 @pytest.mark.replication_pad3d
 @pytest.mark.parametrize(
     "shape", [(1, 3, 4, 8, 8), (2, 16, 2, 3, 5), (4, 8, 3, 4, 4), (2, 1, 1, 2, 2)]
