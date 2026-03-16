@@ -1,3 +1,4 @@
+from flag_gems.ops._assert_async import _assert_async
 from flag_gems.ops.abs import abs, abs_
 from flag_gems.ops.acos import acos
 from flag_gems.ops.add import add, add_
@@ -270,6 +271,7 @@ __all__ = [
     "arange_start",
     "argmax",
     "argmin",
+    "_assert_async",
     "atan",
     "atan_",
     "avg_pool2d",

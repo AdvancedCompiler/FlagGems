@@ -68,6 +68,7 @@ _FULL_CONFIG = (
     ("arange.start_step", arange_start),
     ("argmax", argmax),
     ("argmin", argmin),
+    ("_assert_async", _assert_async),
     ("atan", atan),
     ("atan_", atan_),
     ("avg_pool2d", avg_pool2d),
