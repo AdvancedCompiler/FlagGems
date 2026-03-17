@@ -97,14 +97,79 @@ def format_operator_name(op: str) -> str:
     return op
 
 
+def extract_base_operator(op: str) -> tuple:
+    """
+    Extract the base operator name from a variant.
+
+    For example:
+    - "bitwise_and_scalar" -> ("bitwise_and", False)
+    - "bitwise_and_scalar_" -> ("bitwise_and", True)
+    - "add_out" -> ("add", False)
+    - "add" -> ("add", False)
+    - "add_" -> ("add", True)
+
+    Args:
+        op: Operator name
+
+    Returns:
+        Tuple of (base_name, is_inplace)
+    """
+    # Suffixes that indicate overloaded variants (to be filtered out)
+    # Order matters: longer suffixes first for proper matching
+    overload_suffixes = [
+        "_tensor_float",
+        "_float_tensor",
+        "_tensor_tensor",
+        "_tensor_scalar",
+        "_scalar_other",
+        "_scalar_self",
+        "_self_int",
+        "_self_tensor",
+        "_backward",
+        "_forward",
+        "_start",
+        "_m",
+        "_out",
+        "_tensor",
+        "_scalar",
+        "_dim",
+        "_dims",
+        "_mode",
+        "_int",
+    ]
+
+    is_inplace = False
+    base = op
+
+    # Check if it's an in-place operator (ends with _ but not __)
+    if base.endswith("_") and not base.endswith("__"):
+        is_inplace = True
+        base = base[:-1]
+
+    # Try to strip overload suffixes
+    for suffix in overload_suffixes:
+        if base.endswith(suffix):
+            base = base[: -len(suffix)]
+            break
+
+    return (base, is_inplace)
+
+
 def filter_variants(operators: List[str]) -> List[str]:
     """
-    Filter out variant operators (e.g., _backward, _forward).
+    Filter out variant operators.
 
-    Logic:
-    - If base operator exists (e.g., "softmax"), skip variants (e.g., "softmax_backward")
-    - If base operator doesn't exist but variants exist (e.g., "scaled_softmax_backward"),
-      add the base operator (e.g., "scaled_softmax") instead of keeping variants
+    Filtering rules:
+    1. For operator x, only keep x and x_ (in-place version)
+    2. Filter out overloaded variants:
+       - _out (e.g., "add_out")
+       - _tensor (e.g., "bitwise_and_tensor")
+       - _scalar (e.g., "bitwise_and_scalar")
+       - _tensor_float, _float_tensor, _tensor_tensor (e.g., "normal_tensor_float")
+       - _self_int, _self_tensor (e.g., "repeat_interleave_self_int")
+       - _dim, _dims (e.g., "all_dim")
+       - _backward, _forward (e.g., "softmax_backward")
+    3. If base operator doesn't exist but variants do, generate the base
 
     Args:
         operators: List of operator names
@@ -112,32 +177,41 @@ def filter_variants(operators: List[str]) -> List[str]:
     Returns:
         Filtered list of operator names
     """
-    suffixes_to_remove = ["_backward", "_forward"]
+    op_set = set(operators)
+    base_ops = set()  # Non-inplace base operators
+    inplace_ops = set()  # In-place base operators
 
-    # First, identify all base operators and variants
-    base_operators = set()
-    variants_to_remove = set()
-    bases_to_add = set()
-
+    # First pass: identify operators that are already base forms
     for op in operators:
-        is_variant = False
-        for suffix in suffixes_to_remove:
-            if op.endswith(suffix):
-                base = op[: -len(suffix)]
-                if base in operators:
-                    # Base exists, mark this variant for removal
-                    variants_to_remove.add(op)
-                else:
-                    # Base doesn't exist, add the base
-                    bases_to_add.add(base)
-                is_variant = True
-                break
+        base, is_inplace = extract_base_operator(op)
+        # If the operator IS the base form (no suffix was stripped)
+        if op == base or op == base + "_":
+            if is_inplace:
+                inplace_ops.add(op)
+            else:
+                base_ops.add(op)
 
-        if not is_variant:
-            base_operators.add(op)
+    # Second pass: for variants, extract base and add if not exists
+    for op in operators:
+        base, is_inplace = extract_base_operator(op)
 
-    # Combine: base operators + bases to add (excluding any variants)
-    result = base_operators | bases_to_add
+        # Skip if this is already a base form
+        if op == base or op == base + "_":
+            continue
+
+        # This is a variant - we need to add the base if it doesn't exist
+        if is_inplace:
+            # e.g., bitwise_and_scalar_ -> need bitwise_and_
+            inplace_name = base + "_"
+            if inplace_name not in op_set and inplace_name not in inplace_ops:
+                inplace_ops.add(inplace_name)
+        else:
+            # e.g., bitwise_and_scalar -> need bitwise_and
+            if base not in op_set and base not in base_ops:
+                base_ops.add(base)
+
+    # Combine results
+    result = base_ops | inplace_ops
 
     return list(result)
 
