@@ -8,8 +8,6 @@ import torch
 import flag_gems
 from benchmark.performance_utils import Benchmark
 
-random.seed(42)
-
 
 def is_vllm_available():
     try:
@@ -23,15 +21,20 @@ def is_vllm_available():
 VLLM_AVAILABLE = is_vllm_available()
 
 
-def is_cuda_available():
+def get_sm_version_num():
     if flag_gems.device != "cuda":
         return False
     major, minor = torch.cuda.get_device_capability()
     sm_version_num = major * 10 + minor
+    return sm_version_num
+
+
+def is_hopper_available():
+    sm_version_num = get_sm_version_num()
     return sm_version_num >= 90 and sm_version_num < 100
 
 
-CUDA_AVAILABLE = is_cuda_available()
+HOPPER_AVAILABLE = is_hopper_available()
 
 
 def to_int8(tensor: torch.Tensor):
@@ -231,7 +234,7 @@ class CutlassScaledMMBenchmark(Benchmark):
 
 
 @pytest.mark.skipif(
-    not (VLLM_AVAILABLE and CUDA_AVAILABLE),
+    not (VLLM_AVAILABLE and HOPPER_AVAILABLE),
     reason="requires vLLM and NVIDIA Hopper architecture",
 )
 @pytest.mark.cutlass_scaled_mm
@@ -491,7 +494,7 @@ def _gems_fused_moe_fp8_wrapper(
 
 @pytest.mark.fused_moe
 @pytest.mark.skipif(
-    not (HAS_VLLM_FUSED_MOE and CUDA_AVAILABLE),
+    not (HAS_VLLM_FUSED_MOE and HOPPER_AVAILABLE),
     reason="requires vLLM and NVIDIA Hopper architecture for FP8",
 )
 def test_perf_fused_moe_fp8_gems_vs_vllm():
@@ -808,7 +811,7 @@ def _gems_fused_moe_int8_w8a16_wrapper(
 
 
 @pytest.mark.fused_moe
-@pytest.mark.skipif(not CUDA_AVAILABLE, reason="requires NVIDIA Hopper architecture")
+@pytest.mark.skipif(not HOPPER_AVAILABLE, reason="requires NVIDIA Hopper architecture")
 def test_perf_fused_moe_int8_w8a16_gems_vs_vllm():
     """
     Benchmark FlagGems fused_experts_impl with INT8 W8A16 quantization.
@@ -970,7 +973,7 @@ def _gems_fused_moe_int4_w4a16_wrapper(
 
 
 @pytest.mark.fused_moe
-@pytest.mark.skipif(not CUDA_AVAILABLE, reason="requires NVIDIA Hopper architecture")
+@pytest.mark.skipif(not HOPPER_AVAILABLE, reason="requires NVIDIA Hopper architecture")
 def test_perf_fused_moe_int4_w4a16_gems_vs_vllm():
     """
     Benchmark FlagGems fused_experts_impl with INT4 W4A16 quantization.
@@ -984,4 +987,79 @@ def test_perf_fused_moe_int4_w4a16_gems_vs_vllm():
         dtypes=[torch.bfloat16],
     )
     bench.set_gems(_gems_fused_moe_int4_w4a16_wrapper)
+    bench.run()
+
+
+try:
+    from vllm.utils.deep_gemm import (
+        get_num_sms,
+        get_paged_mqa_logits_metadata,
+        has_deep_gemm,
+    )
+
+    DEEPGEMM_AVAILABLE = has_deep_gemm()
+except ImportError:
+    DEEPGEMM_AVAILABLE = False
+
+
+class GetPagedMqaLogitsMetadataBenchmark(Benchmark):
+    def __init__(self, op_name, torch_op, dtypes):
+        super().__init__(op_name=op_name, torch_op=torch_op, dtypes=dtypes)
+
+    def set_shapes(self, shape_file_path=None):
+        # (batch_size, next_n)
+        self.shapes = [
+            (4, 1),
+            (8, 1),
+            (16, 1),
+            (32, 1),
+            (64, 1),
+            (128, 1),
+            (256, 1),
+            (512, 1),
+            (4, 2),
+            (8, 2),
+            (16, 2),
+            (32, 2),
+        ]
+
+    def get_input_iter(self, cur_dtype):
+        for config in self.shapes:
+            yield from self._input_fn(config, cur_dtype)
+
+    def _input_fn(self, config, dtype):
+        batch_size, next_n = config
+        device = flag_gems.device
+
+        avg_ctx_len = 2048
+        context_lens = torch.randint(
+            int(0.8 * avg_ctx_len),
+            int(1.2 * avg_ctx_len),
+            (batch_size,),
+            device=device,
+            dtype=torch.int32,
+        )
+
+        if next_n > 1:
+            context_lens = (
+                context_lens.unsqueeze(1).expand(batch_size, next_n).contiguous()
+            )
+
+        num_sms = get_num_sms()
+
+        yield (context_lens, 64, num_sms)
+
+
+@pytest.mark.get_paged_mqa_logits_metadata
+@pytest.mark.skipif(
+    not (DEEPGEMM_AVAILABLE and get_sm_version_num() >= 90),
+    reason="requires vLLM with DeepGEMM and NVIDIA Hopper architecture or newer",
+)
+def test_get_paged_mqa_logits_metadata_benchmark():
+    bench = GetPagedMqaLogitsMetadataBenchmark(
+        op_name="get_paged_mqa_logits_metadata",
+        torch_op=get_paged_mqa_logits_metadata,
+        dtypes=[torch.int32],
+    )
+    bench.set_gems(flag_gems.get_paged_mqa_logits_metadata)
     bench.run()

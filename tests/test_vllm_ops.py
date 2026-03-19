@@ -13,27 +13,28 @@ from .conftest import QUICK_MODE
 random.seed(42)
 
 
-def is_vllm_available():
-    try:
-        import vllm  # noqa: 401
+try:
+    import vllm  # noqa: 401
 
-        return True
-    except ImportError:
-        return False
-
-
-VLLM_AVAILABLE = is_vllm_available()
+    VLLM_AVAILABLE = True
+except ImportError:
+    VLLM_AVAILABLE = False
 
 
-def is_cuda_available():
+def get_sm_version_num():
     if flag_gems.device != "cuda":
         return False
     major, minor = torch.cuda.get_device_capability()
     sm_version_num = major * 10 + minor
+    return sm_version_num
+
+
+def is_hopper_available():
+    sm_version_num = get_sm_version_num()
     return sm_version_num >= 90 and sm_version_num < 100
 
 
-CUDA_AVAILABLE = is_cuda_available()
+HOPPER_AVAILABLE = is_hopper_available()
 
 
 def to_int8(tensor: torch.Tensor):
@@ -181,7 +182,7 @@ class CutlassScaledMMTestKit:
 
 
 @pytest.mark.skipif(
-    not (VLLM_AVAILABLE and CUDA_AVAILABLE),
+    not (VLLM_AVAILABLE and HOPPER_AVAILABLE),
     reason="requires vLLM and NVIDIA Hopper architecture",
 )
 @pytest.mark.cutlass_scaled_mm
@@ -514,7 +515,7 @@ def torch_fused_moe_quantized_reference(
 @pytest.mark.fused_moe
 @pytest.mark.parametrize("config", FUSED_MOE_QUANT_CONFIGS)
 @pytest.mark.skipif(
-    not is_cuda_available(),
+    not is_hopper_available(),
     reason="FP8 quantization requires NVIDIA Hopper architecture",
 )
 def test_accuracy_fused_moe_fp8(config):
@@ -992,3 +993,31 @@ def test_fused_moe_apply_router_weight_on_input(config, dtype):
         result_on_input
     ).all(), "result_on_input has non-finite values"
     assert result_on_input.abs().sum() > 0, "result_on_input is all zeros"
+
+
+try:
+    from vllm.utils.deep_gemm import get_num_sms, get_paged_mqa_logits_metadata
+    from vllm.utils.import_utils import has_deep_gemm
+
+    DEEPGEMM_AVAILABLE = has_deep_gemm()
+except Exception:
+    DEEPGEMM_AVAILABLE = False
+
+
+@pytest.mark.get_paged_mqa_logits_metadata
+@pytest.mark.skipif(not DEEPGEMM_AVAILABLE, reason="vllm with deep_gemm is required.")
+@pytest.mark.parametrize("batch_size, next_n", [(4, 1), (2, 2)])
+@pytest.mark.parametrize("avg_ctx_len", [1024, 2048])
+def test_get_paged_mqa_logits_metadata(batch_size, next_n, avg_ctx_len):
+    context_lens_2d = (
+        torch.randint(
+            int(0.8 * avg_ctx_len), int(1.2 * avg_ctx_len), (batch_size, next_n)
+        )
+        .cuda()
+        .to(torch.int32)
+    )
+
+    ref = get_paged_mqa_logits_metadata(context_lens_2d, 64, get_num_sms())
+    res = flag_gems.get_paged_mqa_logits_metadata(context_lens_2d, 64, get_num_sms())
+
+    assert torch.equal(ref, res)
