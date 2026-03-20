@@ -32,7 +32,7 @@ NON_OPERATOR_MARKS = {
 
 EXCLUDED_MARKS = BUILTIN_MARKS | NON_OPERATOR_MARKS
 VALIDATION_EXCLUDES = {"test_named_ops.py"}
-POST_FILTER_EXACT = {"dgeglu", "dreglu"}
+POST_FILTER_EXACT = {"dgeglu", "dreglu", "conv_depthwise2d", "contiguous"}
 POST_FILTER_SUFFIXES = ("_out", "_padding", "_backward", "_bwd")
 
 

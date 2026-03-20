@@ -42,11 +42,9 @@ clamp_
 clamp_min
 clamp_min_
 concat_and_cache_mla
-contiguous
 conv1d
 conv2d
 conv3d
-conv_depthwise2d
 copy_
 cos
 cos_
