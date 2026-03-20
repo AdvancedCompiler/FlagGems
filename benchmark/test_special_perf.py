@@ -1037,7 +1037,6 @@ def test_perf_assert_async():
             msg,
         )
 
-    # 由于 _assert_async 只接受 numel() == 1 的 tensor
     class AssertAsyncBenchmark(GenericBenchmark):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)

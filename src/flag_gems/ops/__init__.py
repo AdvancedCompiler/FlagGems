@@ -1,4 +1,3 @@
-from flag_gems.ops._assert_async import _assert_async
 from flag_gems.ops.abs import abs, abs_
 from flag_gems.ops.acos import acos
 from flag_gems.ops.add import add, add_
@@ -14,6 +13,7 @@ from flag_gems.ops.any import any, any_dim, any_dims
 from flag_gems.ops.arange import arange, arange_start
 from flag_gems.ops.argmax import argmax
 from flag_gems.ops.argmin import argmin
+from flag_gems.ops.assert_async import _assert_async
 from flag_gems.ops.atan import atan, atan_
 from flag_gems.ops.attention import (
     ScaleDotProductAttention,
@@ -252,6 +252,7 @@ from flag_gems.ops.zeros import zero_, zeros
 from flag_gems.ops.zeros_like import zeros_like
 
 __all__ = [
+    "_assert_async",
     "_conv_depthwise2d",
     "_unique2",
     "_upsample_bicubic2d_aa",
@@ -280,7 +281,6 @@ __all__ = [
     "arange_start",
     "argmax",
     "argmin",
-    "_assert_async",
     "atan",
     "atan_",
     "avg_pool2d",
