@@ -13,11 +13,6 @@ def _paged_mqa_logits_metadata_kernel(
     num_sms,
     BLOCK_SIZE: tl.constexpr,
 ):
-    """Triton kernel for computing paged MQA logits metadata.
-
-    This implementation uses inclusive prefix sum with <= comparison,
-    matching the DeepGEMM CUDA behavior.
-    """
     sm_idx = tl.program_id(0)
 
     # 1. Create offsets and mask
@@ -46,13 +41,10 @@ def _paged_mqa_logits_metadata_kernel(
     seg_starts = sm_idx * q + min_r
 
     # 7. Compute q_idx using inclusive prefix sum with <= comparison
-    # This is equivalent to: while prefix_sum[q_idx] <= seg_starts: q_idx += 1
-    # Count elements where prefix_sum <= seg_starts
     is_le = (prefix_sum <= seg_starts) & mask
     q_idx = tl.sum(tl.where(is_le, 1, 0))
 
     # 8. Compute kv_split_idx
-    # Use tl.max with mask to replace dynamic index prefix_sum[q_idx - 1]
     prev_mask = offsets < q_idx
     prev_prefix = tl.max(tl.where(prev_mask, prefix_sum, 0))
     kv_split_idx = seg_starts - prev_prefix
