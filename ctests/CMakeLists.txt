@@ -4,6 +4,18 @@ if(FLAGGEMS_BUILD_POINTWISE_DYNAMIC_CPP)
     PRIVATE Torch::Torch operators GTest::gtest GTest::gtest_main)
   target_compile_definitions(test_triton_add PRIVATE FLAGGEMS_POINTWISE_DYNAMIC)
   add_test(NAME test_triton_add COMMAND test_triton_add)
+
+  add_executable(test_triton_div test_triton_div.cpp)
+  target_link_libraries(test_triton_div
+    PRIVATE Torch::Torch operators gtest gtest_main)
+  target_compile_definitions(test_triton_div PRIVATE FLAGGEMS_POINTWISE_DYNAMIC)
+  add_test(NAME test_triton_div COMMAND test_triton_div)
+
+  add_executable(test_triton_fill test_triton_fill.cpp)
+  target_link_libraries(test_triton_fill
+    PRIVATE Torch::Torch operators GTest::gtest GTest::gtest_main)
+  target_compile_definitions(test_triton_fill PRIVATE FLAGGEMS_POINTWISE_DYNAMIC)
+  add_test(NAME test_triton_fill COMMAND test_triton_fill)
 endif()
 
 add_executable(test_triton_reduction test_triton_reduction.cpp)
@@ -11,9 +23,20 @@ target_link_libraries(test_triton_reduction
   PRIVATE Torch::Torch operators GTest::gtest GTest::gtest_main)
 add_test(NAME test_triton_reduction COMMAND test_triton_reduction)
 
-add_executable(test_triton_blas test_triton_blas.cpp)
-target_link_libraries(test_triton_blas PRIVATE Torch::Torch operators gtest gtest_main)
-add_test(NAME test_triton_blas COMMAND test_triton_blas)
+add_executable(test_triton_mm test_triton_mm.cpp)
+target_link_libraries(test_triton_mm
+  PRIVATE Torch::Torch operators GTest::gtest GTest::gtest_main)
+add_test(NAME test_triton_mm COMMAND test_triton_mm)
+
+add_executable(test_triton_addmm test_triton_addmm.cpp)
+target_link_libraries(test_triton_addmm
+  PRIVATE Torch::Torch operators GTest::gtest GTest::gtest_main)
+add_test(NAME test_triton_addmm COMMAND test_triton_addmm)
+
+add_executable(test_triton_bmm test_triton_bmm.cpp)
+target_link_libraries(test_triton_bmm
+  PRIVATE Torch::Torch operators GTest::gtest GTest::gtest_main)
+add_test(NAME test_triton_bmm COMMAND test_triton_bmm)
 
 add_executable(test_triton_norm test_triton_norm.cpp)
 target_link_libraries(test_triton_norm
@@ -45,11 +68,6 @@ target_link_libraries(test_triton_zeros_constructor
   PRIVATE Torch::Torch operators GTest::gtest GTest::gtest_main)
 add_test(NAME test_triton_zeros_constructor COMMAND test_triton_zeros_constructor)
 
-add_executable(test_triton_bmm test_triton_bmm.cpp)
-target_link_libraries(test_triton_bmm
-  PRIVATE Torch::Torch operators GTest::gtest GTest::gtest_main)
-add_test(NAME test_triton_bmm COMMAND test_triton_bmm)
-
 add_executable(test_triton_embedding test_triton_embedding.cpp)
 target_link_libraries(test_triton_embedding
   PRIVATE Torch::Torch operators GTest::gtest GTest::gtest_main)
@@ -60,10 +78,6 @@ target_link_libraries(test_triton_argmax
   PRIVATE Torch::Torch operators GTest::gtest GTest::gtest_main)
 add_test(NAME test_triton_argmax COMMAND test_triton_argmax)
 
-add_executable(test_triton_div test_triton_div.cpp)
-target_link_libraries(test_triton_div PRIVATE Torch::Torch operators gtest gtest_main)
-add_test(NAME test_triton_div COMMAND test_triton_div)
-
 add_executable(test_triton_sort test_triton_sort.cpp)
 target_link_libraries(test_triton_sort
   PRIVATE Torch::Torch operators GTest::gtest GTest::gtest_main)
@@ -73,11 +87,6 @@ add_executable(test_triton_exponential_ test_triton_exponential_.cpp)
 target_link_libraries(test_triton_exponential_
   PRIVATE Torch::Torch operators GTest::gtest GTest::gtest_main)
 add_test(NAME test_triton_exponential_ COMMAND test_triton_exponential_)
-
-add_executable(test_triton_fill  test_triton_fill.cpp)
-target_link_libraries(test_triton_fill
-  PRIVATE Torch::Torch operators GTest::gtest GTest::gtest_main)
-add_test(NAME test_triton_fill COMMAND test_triton_fill)
 
 add_executable(test_triton_softmax test_triton_softmax.cpp)
 target_link_libraries(test_triton_softmax
