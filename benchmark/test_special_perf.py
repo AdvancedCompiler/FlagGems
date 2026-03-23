@@ -1061,6 +1061,9 @@ def test_perf_unfold_backward():
                 ((2, 17), 1, 4, 6),
             ]
 
+        def set_more_shapes(self):
+            return None
+
         def get_input_iter(self, cur_dtype):
             for config in self.shapes:
                 yield from unfold_backward_input_fn(config, cur_dtype, self.device)
