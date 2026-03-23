@@ -10,13 +10,13 @@ from flag_gems.utils.tensor_wrapper import StridedBuffer
 
 from ..utils.pointwise_dynamic import pointwise_dynamic
 
+logger = logging.getLogger("flag_gems").getChild(__name__.lstrip("."))
 config_ = CodeGenConfig(
     512,
     (65536, 65536, 65536),
     32,
     True,
     prefer_1d_tile=True,
-    is_scatter_slice=True,
 )
 
 
@@ -29,11 +29,23 @@ def copy_func(x):
 def cat(
     A: Union[Tuple[torch.Tensor, ...], List[torch.Tensor]], dim: int = 0
 ) -> torch.Tensor:
-    logging.debug("GEMS CAT")
+    logger.debug("GEMS CAT")
 
     if len(A) == 0:
         raise RuntimeError("torch.cat(): expected a non-empty list of Tensors")
     if len(A) == 1:
+        return A[0]
+
+    # remove torch.Size([0]) tensors
+    device = A[0].device
+    dtype = A[0].dtype
+    A = list(A)
+    for i in range(len(A) - 1, -1, -1):
+        if A[i].shape == torch.Size([0]):
+            A.pop(i)
+    if len(A) == 0:
+        return torch.tensor([], device=device, dtype=dtype)
+    elif len(A) == 1:
         return A[0]
 
     assert dim >= -A[0].ndim and dim < A[0].ndim, f"Invalid dim: {dim}"

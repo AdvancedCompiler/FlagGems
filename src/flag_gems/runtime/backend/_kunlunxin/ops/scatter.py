@@ -6,8 +6,14 @@ from typing import Any, Callable, List, Mapping, Tuple
 import torch
 
 from flag_gems.utils.code_cache import code_cache_dir
-from flag_gems.utils.code_utils import IndentedBuffer
-from flag_gems.utils.shape_utils import has_internal_overlapping, restride_dim
+from flag_gems.utils.code_utils import IndentedBuffer, write_atomic
+from flag_gems.utils.shape_utils import (
+    MemOverlap,
+    has_internal_overlapping,
+    restride_dim,
+)
+
+logger = logging.getLogger("flag_gems").getChild(__name__.lstrip("."))
 
 
 def generate_imports(code: IndentedBuffer) -> IndentedBuffer:
@@ -17,6 +23,7 @@ def generate_imports(code: IndentedBuffer) -> IndentedBuffer:
     code.newline()
     code.writeline("from flag_gems.utils import libentry")
     code.writeline("from flag_gems import runtime")
+    code.writeline("import flag_gems")
     # code.writeline("from flag_gems.utils import triton_lang_extension as tle")
     code.newline()
     code.newline()
@@ -153,17 +160,13 @@ def generate_scatter_kernel(
             code.writeline("if IS_ADD: ")
             with code.indent():
                 code.writeline(
-                    "cur_inp = tl.load(inp + inp_offsets, mask=mask, other=0)"
+                    "tl.atomic_add(out + inp_offsets, cur_src, mask=mask, sem='relaxed')"
                 )
-                code.writeline("res = cur_inp + cur_src")
-                code.writeline("tl.store(out + inp_offsets, res, mask=mask)")
             code.writeline("elif IS_MUL: ")
             with code.indent():
                 code.writeline(
-                    "cur_inp = tl.load(inp + inp_offsets, mask=mask, other=0)"
+                    "tl.atomic_mul(out + inp_offsets, cur_src, mask=mask, sem='relaxed')"
                 )
-                code.writeline("res = cur_inp * cur_src")
-                code.writeline("tl.store(out + inp_offsets, res, mask=mask)")
 
             code.writeline("else: ")
             with code.indent():
@@ -246,6 +249,7 @@ def generate_destination_passing_wrapper(
                 code.writeline("IS_ADD,")
                 code.writeline("IS_MUL,")
                 code.writeline("INT32_OFFSET=int32_offset,")
+                # code.writeline("buffer_size_limit=512,")
                 # code.writeline("isCloseUnrollControl=True,")
 
         code.writeline(")")
@@ -288,15 +292,14 @@ class ScatterFunction:
                 code,
             )
 
-            file_name = f"scatter_rank_{key}_pid_{self.pid}.py"
-
-            with open(code_cache_dir() / file_name, "wt", encoding="utf-8") as f:
-                f.write(code.getvalue())
+            file_name = f"scatter_rank_{key}.py"
+            file_path = code_cache_dir() / file_name
+            write_atomic(file_path, code.getvalue())
 
             # load
             spec = importlib.util.spec_from_file_location(
-                f"_gen_module_rank_{key}_pid_{self.pid}",
-                f.name,
+                f"_gen_module_rank_{key}",
+                file_path,
             )
 
             m = importlib.util.module_from_spec(spec)
@@ -316,7 +319,7 @@ _scatter_func = ScatterFunction()
 
 
 def scatter(inp, dim, index, src, reduce=None):
-    logging.debug("GEMS SCATTER")
+    logger.debug("GEMS SCATTER")
     out = inp.clone()
 
     if reduce is not None:
@@ -324,7 +327,7 @@ def scatter(inp, dim, index, src, reduce=None):
             torch.bfloat16,
         ), "Unsupported operation: reduce scatter bfloat tensors."
 
-    if has_internal_overlapping(out):
+    if has_internal_overlapping(out) == MemOverlap.Yes:
         out = out.contiguous()
 
     src_strided = src.as_strided(index.shape, src.stride())
@@ -351,7 +354,7 @@ def scatter(inp, dim, index, src, reduce=None):
 
 
 def scatter_(inp, dim, index, src, reduce=None):
-    logging.debug("GEMS SCATTER_")
+    logger.debug("GEMS SCATTER_")
     out = inp
 
     if reduce is not None:
@@ -359,8 +362,8 @@ def scatter_(inp, dim, index, src, reduce=None):
             torch.bfloat16,
         ), "Unsupported operation: reduce scatter bfloat tensors."
 
-    assert not has_internal_overlapping(
-        out
+    assert (
+        has_internal_overlapping(out) != MemOverlap.Yes
     ), "Unsupported operation: trying to inplace write to an internally overlapping tensor."
 
     src_restrided = src.as_strided(index.shape, src.stride())

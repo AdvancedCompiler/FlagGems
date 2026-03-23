@@ -4,13 +4,20 @@ import triton
 
 from ..utils.pointwise_dynamic import pointwise_dynamic
 
+logger = logging.getLogger("flag_gems").getChild(__name__.lstrip("."))
 
-@pointwise_dynamic(promotion_methods=[(0, "DEFAULT")])
+
+@pointwise_dynamic(is_tensor=[True, False], promotion_methods=[(0, "DEFAULT")])
 @triton.jit
-def neg_func(x):
+def neg_func(x, inplace):
     return -x
 
 
 def neg(A):
-    logging.debug("GEMS_CAMBRICON NEG")
-    return neg_func(A)
+    logger.debug("GEMS_CAMBRICON NEG")
+    return neg_func(A, False)
+
+
+def neg_(A):
+    logger.debug("GEMS_CAMBRICON NEG_")
+    return neg_func(A, True, out0=A)

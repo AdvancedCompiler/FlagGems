@@ -8,13 +8,15 @@ import torch
 from flag_gems.utils.code_cache import code_cache_dir
 from flag_gems.utils.code_utils import IndentedBuffer
 
+logger = logging.getLogger("flag_gems").getChild(__name__.lstrip("."))
+
 
 def generate_imports(code: IndentedBuffer) -> IndentedBuffer:
     code.writeline("import torch")
     code.writeline("import triton")
     code.writeline("import triton.language as tl")
     code.newline()
-    code.writeline("from flag_gems.utils import libentry")
+    code.writeline("from flag_gems.utils import libentry, libtuner")
     code.writeline("from flag_gems import runtime")
     code.writeline("from flag_gems.utils import triton_lang_extension as tle")
     code.newline()
@@ -40,8 +42,10 @@ def generate_scatter_kernel(
     # the decorators
     code.writeline("@libentry()")
     code.writeline(
-        '@triton.autotune(configs=runtime.get_tuned_config("scatter"), key=["N"])'
+        '@libtuner(configs=runtime.get_tuned_config("scatter"), key=["N"], strategy=["log"],'
     )
+    code.writeline('          restore_value=["out"], )')
+
     code.writeline("@triton.jit")
 
     # signature
@@ -269,7 +273,7 @@ _scatter_func = ScatterFunction()
 
 
 def scatter(inp, dim, index, src, reduce=None):
-    logging.debug("GEMS_CAMBRICON SCATTER")
+    logger.debug("GEMS_CAMBRICON SCATTER")
     inp = inp.contiguous()
     index = index.contiguous()
     src = src.contiguous()
@@ -295,3 +299,32 @@ def scatter(inp, dim, index, src, reduce=None):
         dim=dim,
     )
     return out
+
+
+def scatter_(inp, dim, index, src, reduce=None):
+    logger.debug("GEMS_CAMBRICON SCATTER_")
+    inp = inp.contiguous()
+    index = index.contiguous()
+    src = src.contiguous()
+    out = inp
+
+    N = index.numel()
+
+    large_tensor = (src.numel() * src.element_size() > 2**31) or (
+        out.numel() * out.element_size() > 2**31
+    )
+
+    _scatter_func(
+        src,
+        index,
+        inp,
+        out,
+        dim,
+        reduce,
+        N,
+        rank=len(index.shape),
+        large_tensor=large_tensor,
+        dim=dim,
+    )
+
+    return inp

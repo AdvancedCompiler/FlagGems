@@ -9,6 +9,9 @@ import triton.language as tl
 
 from flag_gems.utils import pointwise_dynamic, tl_extra_shim
 
+logger = logging.getLogger(
+    f'flag_gems.runtime.backend._mthreads.ops.{__name__.split(".")[-1]}'
+)
 erf = tl_extra_shim.erf
 exp = tl_extra_shim.exp
 pow = tl_extra_shim.pow
@@ -64,7 +67,7 @@ def gelu_backward_tanh(x, dy):
 class Gelu(torch.autograd.Function):
     @staticmethod
     def forward(ctx, A, approximate):
-        logging.debug("GEMS GELU FORWARD")
+        logger.debug("GEMS_MTHREADS GELU FORWARD")
         if approximate == "tanh":
             out = gelu_tanh(A)
         else:
@@ -75,7 +78,7 @@ class Gelu(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, out_grad):
-        logging.debug("GEMS GELU BACKWARD")
+        logger.debug("GEMS_MTHREADS GELU BACKWARD")
         (inp,) = ctx.saved_tensors
         approximate = ctx.approximate
         if approximate == "tanh":

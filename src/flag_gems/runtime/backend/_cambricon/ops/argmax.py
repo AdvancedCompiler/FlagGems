@@ -7,10 +7,12 @@ import triton.language as tl
 
 from flag_gems import runtime
 from flag_gems.runtime import torch_device_fn
-from flag_gems.utils import libentry
+from flag_gems.utils import libentry, libtuner
 from flag_gems.utils.shape_utils import can_use_int32_index
 
 from ..utils import TOTAL_CORE_NUM
+
+logger = logging.getLogger("flag_gems").getChild(__name__.lstrip("."))
 
 
 def cfggen_reduce_op():
@@ -31,7 +33,11 @@ def argmax_kernel_once(
 
 
 @libentry()
-@triton.autotune(configs=cfggen_reduce_op(), key=["M"])
+@libtuner(
+    configs=cfggen_reduce_op(),
+    key=["M"],
+    strategy=["log"],
+)
 @triton.jit
 def argmax_kernel_1(
     inp,
@@ -84,12 +90,13 @@ def argmax_kernel_2(mid_value, mid_index, out, real_size, mid_size: tl.constexpr
 
 
 @libentry()
-@triton.autotune(
+@libtuner(
     configs=runtime.get_tuned_config("argmax"),
     key=[
         "M",
         "N",
     ],
+    strategy=["log", "log"],
 )
 @triton.jit
 def argmax_kernel(
@@ -134,7 +141,7 @@ def argmax_kernel(
 
 
 def argmax(inp, dim=None, keepdim=False, *, dtype=None):
-    logging.debug("GEMS_CAMBRICON ARGMAX")
+    logger.debug("GEMS_CAMBRICON ARGMAX")
     if dim is None:
         M = inp.numel()
         if dtype is None:
@@ -150,7 +157,7 @@ def argmax(inp, dim=None, keepdim=False, *, dtype=None):
         else:
             out = torch.empty([], dtype=torch.int64, device=inp.device)
 
-        if M <= 65536:
+        if M <= 65530:
             with torch_device_fn.device(inp.device):
                 argmax_kernel_once[(1, 1, 1)](inp, out, M)
         else:
@@ -178,6 +185,13 @@ def argmax(inp, dim=None, keepdim=False, *, dtype=None):
         assert dim >= -inp.ndim and dim < inp.ndim, "Invalid dim"
         shape = inp.shape
         dim = dim % inp.ndim
+        if inp.numel() == 0:
+            out_shape = list(shape)
+            if keepdim:
+                out_shape[dim] = 1
+            else:
+                del out_shape[dim]
+            return torch.zeros(out_shape, dtype=torch.int64, device=inp.device)
         N = shape[dim]
         M = math.prod(shape[:dim])
         K = inp.numel() // M // N

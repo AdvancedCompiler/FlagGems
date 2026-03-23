@@ -13,6 +13,8 @@ from flag_gems.utils.code_utils import IndentedBuffer
 
 from ..utils import TOTAL_CORE_NUM
 
+logger = logging.getLogger("flag_gems").getChild(__name__.lstrip("."))
+
 
 # --------------------------- repeat wrapper genration -----------------------------------
 def parameter_for_wrapper() -> str:
@@ -413,7 +415,7 @@ class RepeatFunction:
                 ndim,
                 "_wrapper",
                 "_wrapper_out",
-                "_jit_function",
+                "_repeat_flaggems_jit_function",
                 code,
             )
 
@@ -447,7 +449,10 @@ _repeat_func = RepeatFunction()
 @libentry()
 @triton.autotune(
     configs=[
-        triton.Config({"BLOCK_C": 2**n}, num_stages=3) for n in range(10, 17, 2)
+        triton.Config({"BLOCK_C": 2**n}, num_stages=s, num_warps=w)
+        for n in range(6, 17, 2)
+        for s in [1, 3]
+        for w in [1, 4]
     ],
     key=["C"],
 )
@@ -497,7 +502,7 @@ def repeat_2d_kernel(
 
 
 def repeat(inp: torch.Tensor, sizes) -> torch.Tensor:
-    logging.debug("GEMS_CAMBRICON REPEAT")
+    logger.debug("GEMS_CAMBRICON REPEAT")
 
     inp_rank = inp.dim()
     sizes_rank = len(sizes)

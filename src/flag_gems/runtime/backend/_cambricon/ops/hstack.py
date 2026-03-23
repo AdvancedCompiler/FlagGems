@@ -9,6 +9,8 @@ from flag_gems.utils.tensor_wrapper import StridedBuffer
 
 from ..utils.pointwise_dynamic import pointwise_dynamic
 
+logger = logging.getLogger("flag_gems").getChild(__name__.lstrip("."))
+
 
 @pointwise_dynamic(is_tensor=[True], promotion_methods=[(0, "DEFAULT")])
 @triton.jit
@@ -19,7 +21,7 @@ def copy_func(x):
 def hstack(
     tensors: Union[Tuple[torch.Tensor, ...], List[torch.Tensor]]
 ) -> torch.Tensor:
-    logging.debug("GEMS_CAMBRICON HSTACK")
+    logger.debug("GEMS_CAMBRICON HSTACK")
 
     if len(tensors) == 0:
         raise RuntimeError("hstack expected a non-empty TensorList")
@@ -29,6 +31,16 @@ def hstack(
     inp0_shape = tensors[0].shape
     out_shape = list(inp0_shape)
     inp_shapes = [inp0_shape]
+
+    dtypes = [t.dtype for t in tensors]
+    dtype = dtypes[0]
+
+    for ty in dtypes[1:]:
+        dtype = torch.promote_types(dtype, ty)
+
+    for i, tensor in enumerate(tensors):
+        if tensor.dtype != dtype:
+            tensors[i] = tensor.to(dtype)
 
     if len(inp0_shape) == 1:
         dim = 0

@@ -10,10 +10,14 @@ from triton.runtime.jit import JITFunction
 from flag_gems.utils.code_cache import code_cache_dir
 from flag_gems.utils.code_utils import IndentedBuffer
 from flag_gems.utils.shape_utils import (
+    MemOverlap,
     all_c_contiguous,
     all_the_same_shape,
     all_the_same_stride,
+    broadcast_shapes,
     broadcasted_stride,
+    check_tensor_attributes,
+    has_internal_overlapping,
 )
 from flag_gems.utils.tensor_wrapper import StridedBuffer
 from flag_gems.utils.type_utils import ELEMENTWISE_TYPE_PROMOTION_KIND, type_promotion
@@ -558,6 +562,7 @@ class KernelGenerator:
             code.writeline(
                 f"in{i} = tl.load(in{i}_ptr + {offset_combine}, mask=mask).to(in{i}_ptr.type.element_ty)"
             )
+        # code.writeline("print(\"in0\", in0)")
 
         code.newline()
 
@@ -680,6 +685,7 @@ class KernelGenerator:
             code.writeline(
                 f"in{i} = tl.load(in{i}_ptr + {offset_combine}, mask=mask).to(in{i}_ptr.type.element_ty)"
             )
+        # code.writeline("print(\"in0\", in0)")
 
         code.newline()
 
@@ -811,7 +817,6 @@ class WrapperGenerator:
             f"out{i}.shape" for i in range(schema.num_output_tensors())
         ]
         check: str = " == ".join(params)
-        # code.writeline(f"import pudb; pudb.set_trace()")
         code.writeline(f"assert {check}, 'operand shapes mismatch'")
 
     def gen_task_partition(self, code: IndentedBuffer):
@@ -862,11 +867,32 @@ class WrapperGenerator:
             code.writeline("num_tiles = triton.cdiv(num_tasks, tile_size)")
             # max_grid_size0 = self.config.max_grid_size[0]
             # code.writeline(f"num_ctas = min({max_grid_size0}, num_tiles)")
-            code.writeline("num_ctas = 12 # XPU BLOCK_NUM")
-            code.writeline("num_tiles = 12 # XPU BLOCK_NUM")
+            determine_num_ctas_and_tiles = [
+                "if sum(out0.shape) <= 2048*64:",
+                "   num_ctas = 1 # XPU BLOCK_NUM",
+                "   num_tiles = 1 # XPU BLOCK_NUM",
+                "else:",
+                "   num_ctas = 12 # XPU BLOCK_NUM",
+                "   num_tiles = 12 # XPU BLOCK_NUM",
+            ]
+            if self.config.kunlunAutoGrid is True:
+                code.writelines(determine_num_ctas_and_tiles)
+            else:
+                code.writeline("num_ctas = 12 # XPU BLOCK_NUM")
+                code.writeline("num_tiles = 12 # XPU BLOCK_NUM")
             code.writeline(
                 "tile_size = triton.next_power_of_2(triton.cdiv(num_tasks, num_tiles)) # XPU BLOCK_NUM"
             )
+
+            # code.writeline("element_size = get_element_size(in0.dtype)")
+            # code.writeline(
+            #     "tile_size = min("
+            #     "triton.next_power_of_2(triton.cdiv(num_tasks, 12)), "
+            #     "triton.cdiv(2048 * 64, element_size)"
+            #     ")"
+            # )
+            # code.writeline("num_tiles = triton.cdiv(num_tasks, tile_size)")
+            # code.writeline("num_ctas = num_tiles")
 
             code.writeline("tiles_per_cta = triton.cdiv(num_tiles, num_ctas)")
             code.writeline("num_warps = heuristics_for_num_warps(tile_size)")
@@ -950,10 +976,24 @@ class WrapperGenerator:
                     code.writeline("isCloseOffsetAnalysis=True,")
                 elif self.config.is_cat:
                     code.writeline("buffer_size_limit=512,")
+                elif self.config.buffer_size_limit:
+                    code.writeline(
+                        f"buffer_size_limit={self.config.buffer_size_limit},"
+                    )
                 else:
                     code.writeline("buffer_size_limit=2048,")
+                if self.config.isCloseVectorization:
+                    code.writeline("isCloseVectorization=True,")
+                if self.config.isCloseInterleave:
+                    code.writeline("isCloseInterleave=True,")
+                if self.config.isCloseDtypeConvert:
+                    code.writeline("isCloseDtypeConvert=True,")
+                if not self.config.isCloseMemoryAsync:
+                    code.writeline("isCloseMemoryAsync=False,")
                 if os.getenv("XPU_cmp_nan") == "1":
                     code.writeline("isOpenCmpNan=True,")
+                if self.config.unroll_num:
+                    code.writeline(f"unroll_num={self.config.unroll_num},")
             code.writeline(")")
 
     def gen_kernel_launch_1d(
@@ -1005,10 +1045,24 @@ class WrapperGenerator:
                     code.writeline("isCloseOffsetAnalysis=True,")
                 elif self.config.is_cat:
                     code.writeline("buffer_size_limit=512,")
+                elif self.config.buffer_size_limit:
+                    code.writeline(
+                        f"buffer_size_limit={self.config.buffer_size_limit},"
+                    )
                 else:
                     code.writeline("buffer_size_limit=2048,")
+                if self.config.isCloseVectorization:
+                    code.writeline("isCloseVectorization=True,")
+                if self.config.isCloseInterleave:
+                    code.writeline("isCloseInterleave=True,")
+                if self.config.isCloseDtypeConvert:
+                    code.writeline("isCloseDtypeConvert=True,")
+                if not self.config.isCloseMemoryAsync:
+                    code.writeline("isCloseMemoryAsync=False,")
                 if os.getenv("XPU_cmp_nan") == "1":
                     code.writeline("isOpenCmpNan=True,")
+                if self.config.unroll_num:
+                    code.writeline(f"unroll_num={self.config.unroll_num},")
             code.writeline(")")
 
     def gen_return(self, code: IndentedBuffer):
@@ -1075,6 +1129,7 @@ class ModuleGenerator:
         code.writeline("from flag_gems.utils.libentry import libentry")
         code.writeline("from flag_gems.utils import triton_lang_extension as tle")
         code.writeline("from flag_gems.runtime import torch_device_fn")
+        # code.writeline("from _kunlunxin.utils.block_size_utils import get_element_size")
         code.newline()
         code.newline()
         return code
@@ -1113,7 +1168,6 @@ class PointwiseDynamicFunction:
     def __call__(self, *args, **kwargs):
         # inputs must be passed by position, outputs must be passed by keyword
         ndim, args, kwargs = self.prepare_args(*args, **kwargs)
-        # import pudb; pudb.set_trace()
         overload = self.instantiate(ndim)
         out = overload(*args, **kwargs)
         # NOTE: overload keeps the type of outputs:
@@ -1147,6 +1201,11 @@ class PointwiseDynamicFunction:
             else:
                 outputs_that_need_allocation.append(i)
         # input arguments must be passed by position
+        if schema._is_tensor is not None:
+            if not check_tensor_attributes(args, (schema._is_tensor)):
+                raise ValueError(
+                    "Input arguments must be passed by position, and the corresponding dtype must be specified."
+                )
         in_tensors = [item for i, item in enumerate(args) if schema.is_tensor(i)]
 
         # output dtype promotions
@@ -1186,8 +1245,22 @@ class PointwiseDynamicFunction:
             # a simple strategy: all the undefined tensors will follow the first
             # tensor that is not broadcated, no attempts to simplify task, no reordering,
             # no dimenion collapsing
-            shapes = tuple(item.shape for item in tensors)
-            task_shape = torch.broadcast_shapes(*shapes)
+            shapes = tuple(item.shape for item in in_tensors)
+
+            task_shape = broadcast_shapes(shapes)
+
+            if out_tensors:
+                for index, item in enumerate(out_tensors):
+                    if list(item.shape) != list(task_shape):
+                        raise RuntimeError(
+                            f"out tensor at index {index} shape is invalid, should be {task_shape} but is {item.shape}!"
+                        )
+                    # output arguments must not have internal overlapping for pointwise operation
+                    if has_internal_overlapping(item) == MemOverlap.Yes:
+                        raise RuntimeError(
+                            "Pointwise Input arguments should not have internal overlapping."
+                        )
+
             ndim = len(task_shape)
             for item in tensors:
                 if item.shape == task_shape:
@@ -1239,7 +1312,6 @@ class PointwiseDynamicFunction:
         return tuple(item.unwrap() for item in tensors)
 
     def instantiate(self, ndim):
-        # import pudb; pudb.set_trace()
         # NOTE: manually instantiated overload does not have `prepare_args` as
         # preprocessing, so you have to manually allocate output and make sure that
         # the inputs & ouputs actually fits the manually instantiated overload

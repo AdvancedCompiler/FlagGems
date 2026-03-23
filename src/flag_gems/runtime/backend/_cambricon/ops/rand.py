@@ -15,6 +15,7 @@ from flag_gems.utils.shape_utils import volume
 
 from ..utils import TOTAL_CORE_NUM
 
+logger = logging.getLogger("flag_gems").getChild(__name__.lstrip("."))
 device_ = device
 
 
@@ -55,7 +56,7 @@ UNROLL = 4
 
 
 def rand(size, *, dtype=None, layout=None, device=None, pin_memory=None):
-    logging.debug("GEMS_CAMBRICON RAND")
+    logger.debug("GEMS_CAMBRICON RAND")
     if dtype is None:
         dtype = torch.get_default_dtype()
     if device is None:

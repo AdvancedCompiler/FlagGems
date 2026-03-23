@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 
 import pytest
+import torch
 
 import flag_gems
 
@@ -23,9 +24,11 @@ def pytest_addoption(parser):
         help="device to run reference tests on",
     )
     parser.addoption(
-        "--mode"
-        if flag_gems.vendor_name != "kunlunxin"
-        else "--fg_mode",  # TODO: fix pytest-* common --mode args,
+        (
+            "--mode"
+            if not (flag_gems.vendor_name == "kunlunxin" and torch.__version__ < "2.5")
+            else "--fg_mode"
+        ),  # TODO: fix pytest-* common --mode args,
         action="store",
         default="normal",
         required=False,
@@ -112,19 +115,45 @@ test_results = {}
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_protocol(item, nextitem):
-    test_results[item.nodeid] = {"params": None, "result": None}
+    test_results[item.nodeid] = {"params": None, "result": None, "opname": None}
     param_values = {}
     request = item._request
     if hasattr(request, "node") and hasattr(request.node, "callspec"):
         param_values = request.node.callspec.params
 
     test_results[item.nodeid]["params"] = param_values
+    # get all mark
+    all_marks = [mark.name for mark in item.iter_markers()]
+    # exclude marks，such as parametrize、skipif and so on
+    exclude_marks = {"parametrize", "skip", "skipif", "xfail", "usefixtures", "inplace"}
+    operator_marks = [mark for mark in all_marks if mark not in exclude_marks]
+    test_results[item.nodeid]["opname"] = operator_marks
+
+
+def get_skipped_reason(report):
+    if hasattr(report.longrepr, "reprcrash"):
+        return report.longrepr.reprcrash.message
+    elif isinstance(report.longrepr, tuple):
+        return report.longrepr[2]
+    else:
+        return str(report.longrepr)
 
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_logreport(report):
-    if report.when == "call":
+    if report.when == "setup":
+        if report.outcome == "skipped":
+            reason = get_skipped_reason(report)
+            test_results[report.nodeid]["result"] = "skipped"
+            test_results[report.nodeid]["skipped_reason"] = reason
+
+    elif report.when == "call":
         test_results[report.nodeid]["result"] = report.outcome
+        if report.outcome == "skipped":
+            reason = get_skipped_reason(report)
+            test_results[report.nodeid]["skipped_reason"] = reason
+        else:
+            test_results[report.nodeid]["skipped_reason"] = None
 
 
 def pytest_terminal_summary(terminalreporter):

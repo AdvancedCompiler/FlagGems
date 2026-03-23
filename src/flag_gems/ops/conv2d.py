@@ -1,11 +1,14 @@
 import logging
+import math
 
 import torch
 import triton
 import triton.language as tl
 
-from .. import runtime
-from ..utils import libentry
+from flag_gems import runtime
+from flag_gems.utils import libentry
+
+logger = logging.getLogger(__name__)
 
 
 def conv2d_output_size(
@@ -336,7 +339,7 @@ def conv2d_backward_kernel_weight(
 class Conv2d(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input, weight, bias, stride, padding, dilation, groups):
-        logging.debug("GEMS CONV2D")
+        logger.debug("GEMS CONV2D")
         assert weight.ndim == 4, "Weights must be 4D, received shape {weight.shape}"
         assert (
             bias is None or bias.ndim == 1
@@ -436,7 +439,7 @@ class Conv2d(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, out_grad):
-        logging.debug("GEMS CONV2D VJP")
+        logger.debug("GEMS CONV2D VJP")
         (weight, input, bias) = ctx.saved_tensors
         # (out_c equals origin cout divide groups)
         out_c, weight_c, weight_height, weight_width = ctx.weight_info
@@ -589,4 +592,41 @@ class Conv2d(torch.autograd.Function):
 
 # todo test SymInt[2] of stride or padding
 def conv2d(input, weight, bias=None, stride=1, padding=0, dilation=1, groups=1):
-    return Conv2d.apply(input, weight, bias, stride, padding, dilation, groups)
+    if isinstance(padding, str):
+        if padding == "same":
+            assert (
+                stride == 1
+            ), "Doesn't support any stride values other than 1 \
+                in padding = 'same' mode, received stride value {stride}"
+            ih = input.shape[-2]
+            iw = input.shape[-1]
+            kernel_size_h = weight.shape[-2]
+            kernel_size_w = weight.shape[-1]
+            padding_h = int(
+                math.ceil(
+                    (stride * (ih - 1) + 1 + dilation * (kernel_size_h - 1) - ih) / 2
+                )
+            )
+            padding_w = int(
+                math.ceil(
+                    (stride * (iw - 1) + 1 + dilation * (kernel_size_w - 1) - iw) / 2
+                )
+            )
+            oh = int(
+                (ih + 2 * padding_h - dilation * (kernel_size_h - 1) - 1) / stride + 1
+            )
+            ow = int(
+                (iw + 2 * padding_w - dilation * (kernel_size_w - 1) - 1) / stride + 1
+            )
+            padding = max(padding_h, padding_w)
+            return Conv2d.apply(input, weight, bias, stride, padding, dilation, groups)[
+                ..., (oh - ih) :, (ow - iw) :
+            ]
+        elif padding == "valid":
+            return Conv2d.apply(input, weight, bias, stride, 0, dilation, groups)
+        else:
+            raise ValueError(
+                f"Unsupported padding string: {padding}, only'valild'/'same' are allowed."
+            )
+    else:
+        return Conv2d.apply(input, weight, bias, stride, padding, dilation, groups)

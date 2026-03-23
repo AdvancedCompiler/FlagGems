@@ -5,10 +5,20 @@ import torch
 import triton
 import triton.language as tl
 
-# from flag_gems import runtime
+from flag_gems import runtime
 from flag_gems.runtime import torch_device_fn
 from flag_gems.utils import libentry
 from flag_gems.utils import triton_lang_extension as tle
+from flag_gems.utils.limits import get_dtype_min
+
+torch_dtype_to_tl_dtype_and_min_value = {
+    torch.int16: (tl.int16, torch.iinfo(torch.int16).min),
+    torch.int32: (tl.int32, torch.iinfo(torch.int32).min),
+    torch.float16: (tl.float16, torch.finfo(torch.float16).min),
+    torch.float32: (tl.float32, torch.finfo(torch.float32).min),
+    torch.bfloat16: (tl.float32, torch.finfo(torch.float32).min),
+}
+logger = logging.getLogger(__name__)
 
 
 @libentry()
@@ -24,7 +34,8 @@ def argmax_kernel_1(
     offset = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     inp_ptrs = inp + offset
     mask = offset < M
-    inp_val = tl.load(inp_ptrs, mask=mask, other=-float("inf"))
+    min_value = get_dtype_min(inp.type.element_ty)
+    inp_val = tl.load(inp_ptrs, mask=mask, other=min_value)
     max_val, max_index = tl.max(inp_val, axis=0, return_indices=True)
     max_index = max_index + pid * BLOCK_SIZE
     mid_value_ptr = mid_value + pid
@@ -39,7 +50,8 @@ def argmax_kernel_2(mid_value, mid_index, out, mid_size, BLOCK_MID: tl.constexpr
     offset = tl.arange(0, BLOCK_MID)
     mid_ptrs = mid_value + offset
     mask = offset < mid_size
-    mid_val = tl.load(mid_ptrs, mask=mask, other=-float("inf"))
+    min_value = get_dtype_min(mid_value.type.element_ty)
+    mid_val = tl.load(mid_ptrs, mask=mask, other=min_value)
     index_val = tl.argmax(mid_val, axis=0)
     mid_index_ptrs = mid_index + index_val
     out_val = tl.load(mid_index_ptrs)
@@ -74,12 +86,58 @@ def argmax_kernel(
     BLOCK_M: tl.constexpr,
     BLOCK_N: tl.constexpr,
 ):
-    # m_offset = pidX * BLOCK_M + tl.arange(0, BLOCK_M)
-    # offset = m_offset * N * K + tl.arange(0, BLOCK_N) * K + pidY
     # set offset
     pid_m = tle.program_id(0)
     pid_k = tle.program_id(1)
     m_offset = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
+
+    dtype = inp.type.element_ty
+    acc_type = tl.float32 if dtype is tl.bfloat16 else dtype
+    min_value = get_dtype_min(dtype)
+    max_values = tl.full([BLOCK_M], dtype=acc_type, value=min_value)
+    argmax_values = tl.full([BLOCK_M], dtype=tl.int64, value=0)
+    for start_n in range(0, N, BLOCK_N):
+        n_offset = start_n + tl.arange(0, BLOCK_N)
+        offset = m_offset[:, None] * N * K + n_offset[None, :] * K + pid_k
+        mask = m_offset[:, None] < M and n_offset[None, :] < N
+        inp_ptrs = inp + offset
+        inp_vals = tl.load(inp_ptrs, mask=mask, other=min_value)
+        local_max, local_argmax = tl.max(
+            inp_vals, 1, return_indices=True, return_indices_tie_break_left=True
+        )
+        # if return indices is not supported, call a tl.argmax in addition
+        # local_argmax = tl.argmax(inp_vals, 1)
+        update = local_max > max_values
+        max_values = tl.where(update, local_max, max_values)
+        argmax_values = tl.where(update, start_n + local_argmax, argmax_values)
+
+    offset_index = m_offset * K + pid_k
+    out_index_ptrs = out_index + offset_index
+    mask1 = m_offset < M
+    tl.store(out_index_ptrs, argmax_values, mask=mask1)
+
+
+@libentry()
+@triton.heuristics(runtime.get_heuristic_config("argmax"))
+@triton.jit
+def argmax_kernel_small_n(
+    inp,
+    out_index,
+    M,
+    N,
+    K,
+    tl_dtype: tl.constexpr,
+    dtype_min_value: tl.constexpr,
+    BLOCK_M: tl.constexpr,
+    BLOCK_N: tl.constexpr,
+):
+    # set offset
+    pid_m = tle.program_id(0)
+    pid_k = tle.program_id(1)
+    m_offset = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
+
+    if tl_dtype is tl.int16:
+        tl_dtype = tl.int32
     n_offset = tl.arange(0, BLOCK_N)
     offset = m_offset[:, None] * N * K + n_offset[None, :] * K + pid_k
     offset_index = m_offset * K + pid_k
@@ -87,8 +145,7 @@ def argmax_kernel(
     mask1 = m_offset < M
     mask = m_offset[:, None] < M and n_offset[None, :] < N
     inp_ptrs = inp + offset
-    inp_vals = tl.load(inp_ptrs, mask=mask, other=-float("inf"))
-    # inp_vals = tl.where(mask, inp_vals, -float("inf"))
+    inp_vals = tl.load(inp_ptrs, mask=mask, other=dtype_min_value)
     _, result_index = tl.max(inp_vals, axis=1, return_indices=True)
 
     out_index_ptrs = out_index + offset_index
@@ -97,7 +154,7 @@ def argmax_kernel(
 
 
 def argmax(inp, dim=None, keepdim=False, *, dtype=None):
-    logging.debug("GEMS ARGMAX")
+    logger.debug("GEMS ARGMAX")
     if dim is None:
         M = inp.numel()
         if dtype is None:
@@ -130,6 +187,13 @@ def argmax(inp, dim=None, keepdim=False, *, dtype=None):
         assert dim >= -inp.ndim and dim < inp.ndim, "Invalid dim"
         shape = inp.shape
         dim = dim % inp.ndim
+        if inp.numel() == 0:
+            out_shape = list(shape)
+            if keepdim:
+                out_shape[dim] = 1
+            else:
+                del out_shape[dim]
+            return torch.zeros(out_shape, dtype=torch.int64, device=inp.device)
         N = shape[dim]
         M = math.prod(shape[:dim])
         K = inp.numel() // M // N
@@ -145,6 +209,21 @@ def argmax(inp, dim=None, keepdim=False, *, dtype=None):
             triton.cdiv(M, meta["BLOCK_M"]),
             K,
         )
+
+        if N == 1:
+            tl_dtype, dtype_min_value = torch_dtype_to_tl_dtype_and_min_value[inp.dtype]
+            with torch_device_fn.device(inp.device):
+                argmax_kernel_small_n[grid](
+                    inp,
+                    out_index,
+                    M,
+                    N,
+                    K,
+                    tl_dtype,
+                    dtype_min_value,
+                )
+            return out_index
+
         with torch_device_fn.device(inp.device):
             argmax_kernel[grid](
                 inp,
@@ -152,6 +231,7 @@ def argmax(inp, dim=None, keepdim=False, *, dtype=None):
                 M,
                 N,
                 K,
+                is_use_mask_zero=True,
             )
 
         return out_index

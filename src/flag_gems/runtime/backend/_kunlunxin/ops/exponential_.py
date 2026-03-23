@@ -12,6 +12,7 @@ from flag_gems.utils.random_utils import (
     uint_to_uniform_float,
 )
 
+logger = logging.getLogger("flag_gems").getChild(__name__.lstrip("."))
 # def heur_block(args):
 #     if args["N"] <= 512:
 #         return 512
@@ -101,13 +102,14 @@ def paste_u64(hi: tl.uint32, lo: tl.uint32):
 def transform_exponential(u, lambd, eps):
     eps1 = -0.5 * eps
     is_min = u >= 1.0 + eps1
-    log = tl.where(is_min, eps1, log2(u))
+    trans_scale = 1.0 / 1.4426950408889634
+    log = tl.where(is_min, eps1, log2(u) * trans_scale)
     v = -1.0 / lambd * log
     return v
 
 
-def exponential_(x, lambd: float = 1.0, *, gen=None):
-    logging.debug("GEMS EXPONENTIAL_")
+def exponential_(x, lambd: float = 1.0, *, generator=None):
+    logger.debug("GEMS EXPONENTIAL_")
     dtype = x.dtype
     device = x.device
     inplace = x.is_contiguous()
@@ -119,7 +121,9 @@ def exponential_(x, lambd: float = 1.0, *, gen=None):
     # (TODO) Using Triton autotuner makes kernel parameters opaque to the caller,
     # hence we cannot obtain the per thread offset as in Pytorch.
     increment = triton.cdiv(N, UNROLL)
-    philox_seed, philox_offset = philox_backend_seed_offset(increment)
+    philox_seed, philox_offset = philox_backend_seed_offset(
+        increment, generator=generator
+    )
     eps = torch.finfo(dtype).eps
     x_ = x if inplace else torch.empty(x.size(), dtype=dtype, device=device)
     with torch_device_fn.device(device):

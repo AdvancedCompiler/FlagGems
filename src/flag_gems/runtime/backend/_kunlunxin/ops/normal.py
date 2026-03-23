@@ -10,7 +10,7 @@ from flag_gems.utils.shape_utils import broadcast_shapes, volume
 from ..utils.pointwise_dynamic import pointwise_dynamic
 from .randn import randn_kernel
 
-UNROLL = 4
+logger = logging.getLogger("flag_gems").getChild(__name__.lstrip("."))
 
 
 @pointwise_dynamic(
@@ -45,20 +45,30 @@ def transform_func_float_float(val, std, mean):
     return val * std + mean
 
 
-def normal_distribution(shape, device, *, generator=None):
-    out = torch.empty(shape, device=device, dtype=torch.float32)
+UNROLL = 4
+
+
+def normal_distribution(shape, device, *, generator=None, out=None):
+    if out is None:
+        out = torch.empty(shape, device=device, dtype=torch.float32)
     N = volume(shape)
-    grid_fn = lambda meta: (triton.cdiv(N, meta["BLOCK"] * UNROLL),)
+    # grid_fn = lambda meta: (triton.cdiv(N, meta["BLOCK"] * UNROLL),)
+    cluster_num = 12
+    BLOCK_SIZE = min(triton.next_power_of_2(triton.cdiv(N, cluster_num * UNROLL)), 1024)
+    # BLOCK_SIZE = min(triton.next_power_of_2(triton.cdiv(N, cluster_num * UNROLL)), triton.cdiv(32768, UNROLL))
+    grid_fn = triton.cdiv(N, BLOCK_SIZE * UNROLL)
 
     increment = triton.cdiv(N, UNROLL)
-    philox_seed, philox_offset = philox_backend_seed_offset(increment)
+    philox_seed, philox_offset = philox_backend_seed_offset(
+        increment, generator=generator
+    )
     with torch_device_fn.device(device):
-        randn_kernel[grid_fn](out, N, philox_seed, philox_offset)
+        randn_kernel[(grid_fn,)](out, N, philox_seed, philox_offset, BLOCK_SIZE)
     return out
 
 
 def normal_tensor_tensor(mean, std, *, generator=None):
-    logging.debug("GEMS NORMAL_TENSOR_TENSOR")
+    logger.debug("GEMS NORMAL_TENSOR_TENSOR")
     shape = broadcast_shapes([mean.shape, std.shape])
     device = mean.device
     out = normal_distribution(shape, device)
@@ -66,7 +76,7 @@ def normal_tensor_tensor(mean, std, *, generator=None):
 
 
 def normal_tensor_float(mean, std, *, generator=None):
-    logging.debug("GEMS NORMAL_TENSOR_FLOAT")
+    logger.debug("GEMS NORMAL_TENSOR_FLOAT")
     shape = mean.shape
     device = mean.device
     out = normal_distribution(shape, device)
@@ -74,8 +84,17 @@ def normal_tensor_float(mean, std, *, generator=None):
 
 
 def normal_float_tensor(mean, std, *, generator=None):
-    logging.debug("GEMS NORMAL_FLOAT_TENSOR")
+    logger.debug("GEMS NORMAL_FLOAT_TENSOR")
     shape = std.shape
     device = std.device
     out = normal_distribution(shape, device)
     return transform_func_float_tensor(out, std, mean)
+
+
+def normal_(self, mean=0, std=1, *, generator=None):
+    logger.debug("GEMS NORMAL_")
+    shape = self.shape
+    device = self.device
+    self = normal_distribution(shape, device, generator=None, out=self)
+    transform_func_float_float(self, std, mean, out0=self)
+    return self

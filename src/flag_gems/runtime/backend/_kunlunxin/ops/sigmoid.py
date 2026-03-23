@@ -1,17 +1,31 @@
 import logging
 
-import torch
 import triton
 import triton.language as tl
+from _kunlunxin.utils.codegen_config_utils import CodeGenConfig
 
 from flag_gems.utils import tl_extra_shim
 
 from ..utils.pointwise_dynamic import pointwise_dynamic
 
+logger = logging.getLogger("flag_gems").getChild(__name__.lstrip("."))
 exp2 = tl_extra_shim.exp2
 
 
-@pointwise_dynamic(promotion_methods=[(0, "INT_TO_FLOAT")])
+config_ = CodeGenConfig(
+    512,
+    (65536, 65536, 65536),
+    32,
+    True,
+    prefer_1d_tile=True,
+    buffer_size_limit=4096,
+    isCloseVectorization=True,
+    kunlunAutoGrid=True,
+    unroll_num=8,
+)
+
+
+@pointwise_dynamic(promotion_methods=[(0, "INT_TO_FLOAT")], config=config_)
 @triton.jit
 def sigmoid_forward(x):
     # log2e: tl.constexpr = math.log2(math.e)
@@ -23,31 +37,25 @@ def sigmoid_forward(x):
 
 @pointwise_dynamic(promotion_methods=[(0, "INT_TO_FLOAT")])
 @triton.jit
-def sigmoid_backward(y, dy):
+def sigmoid_backward_kernel(dy, y):
     y_f32 = y.to(tl.float32)
     dy_f32 = dy.to(tl.float32)
     return dy_f32 * (1.0 - y_f32) * y_f32
 
 
-class Sigmoid(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, A):
-        logging.debug("GEMS SIGMOID FORWARD")
-        if A.requires_grad is True:
-            out = sigmoid_forward(A.to(torch.float32))
-            ctx.save_for_backward(out)
-            return out.to(A.dtype)
-        else:
-            out = sigmoid_forward(A)
-            return out
-
-    @staticmethod
-    def backward(ctx, out_grad):
-        logging.debug("GEMS SIGMOID BACKWARD")
-        (out,) = ctx.saved_tensors
-        in_grad = sigmoid_backward(out, out_grad)
-        return in_grad
+def sigmoid(self):
+    logger.debug("GEMS SIGMOID FORWARD")
+    output = sigmoid_forward(self)
+    return output
 
 
-def sigmoid(A):
-    return Sigmoid.apply(A)
+def sigmoid_backward(grad_output, output):
+    logger.debug("GEMS SIGMOID BACKWARD")
+    grad_input = sigmoid_backward_kernel(grad_output, output)
+    return grad_input
+
+
+def sigmoid_(A):
+    logger.debug("GEMS SIGMOID_ FORWARD")
+    out = sigmoid_forward(A, out0=A)
+    return out

@@ -25,11 +25,15 @@ VendorInfoBase(
     vendor_name="xxx", device_name="xxx", device_query_cmd="xxx"
 )
 ```
+###### Necessary fields:
 - `vendor_name` is your vendorname, like `nvidia`
 
 - `device_name` is your devicename, like `cuda`
 
 - `device_query_cmd` is a command that can only be successfully executed on your vendor's device, like `nvidia-smi`
+
+###### Optional fields:
+- `dispatch_key` is The operator registration field of torch.library.Library in pytorch, like `PrivateUse1`
 
 ##### step 2.2  `heuristics_config_utils.py`
 

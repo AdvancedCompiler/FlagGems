@@ -1,16 +1,19 @@
+import logging
 import math
 
 import torch
 import triton
 import triton.language as tl
 
+from flag_gems.runtime import torch_device_fn
+from flag_gems.utils import triton_lang_extension as tle
 from flag_gems.utils.libentry import libentry
 
-from ..runtime import torch_device_fn
-from ..utils import triton_lang_extension as tle
 from .all import reduce_all
 from .any import reduce_any
 from .unique import _unique2
+
+logger = logging.getLogger(__name__)
 
 
 def launch_arg(BLOCK_M, BLOCK_N, N, num_warps):
@@ -98,8 +101,8 @@ def isin_by_comparation(
         BLOCK_M, BLOCK_N, num_warps = launch_arg(2, 256, N, 4)
     elif M <= 6144:
         BLOCK_M, BLOCK_N, num_warps = launch_arg(4, 128, N, 4)
-    elif M <= 9216:
-        BLOCK_M, BLOCK_N, num_warps = launch_arg(4, 256, N, 8)
+    # elif M <= 9216:
+    #     BLOCK_M, BLOCK_N, num_warps = launch_arg(4, 256, N, 8)
     else:
         BLOCK_M, BLOCK_N, num_warps = launch_arg(4, 128, N, 4)
     if torch.version.hip is not None:
@@ -256,6 +259,7 @@ def isin(
     assume_unique: bool = False,
     invert: bool = False,
 ) -> torch.Tensor:
+    logger.debug("GEMS ALLCLOSE")
     if not torch.is_tensor(in0):
         assert torch.is_tensor(in1)
         in0 = torch.tensor(in0, device=in1.device)

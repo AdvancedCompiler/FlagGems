@@ -4,8 +4,10 @@ import torch
 import triton
 import triton.language as tl
 
-from ..runtime import torch_device_fn
-from ..utils import libentry
+from flag_gems.runtime import torch_device_fn
+from flag_gems.utils import libentry
+
+logger = logging.getLogger(__name__)
 
 
 @libentry()
@@ -239,7 +241,7 @@ def nll_loss2d_backward_kernel(
 
 # 1d & 2d tensor
 def nll_loss_forward(self, target, weight=None, reduction=1, ignore_index=-100):
-    logging.debug("GEMS NLL Loss FWD")
+    logger.debug("GEMS NLL Loss FWD")
     assert self.ndim <= 2, "Invalid input ndim"
     shape = list(target.shape)
     N = 1 if self.ndim == 1 else self.shape[0]
@@ -301,7 +303,7 @@ def nll_loss_backward(
     ignore_index=-100,
     total_weight=None,
 ):
-    logging.debug("GEMS NLL Loss BWD")
+    logger.debug("GEMS NLL Loss BWD")
     N = 1 if self.ndim == 1 else self.shape[0]
     C = self.shape[-1]
 
@@ -330,13 +332,13 @@ def nll_loss_backward(
 
 # 3d+ tensor
 def nll_loss2d_forward(self, target, weight=None, reduction=1, ignore_index=-100):
-    logging.debug("GEMS NLL Loss2d FWD")
+    logger.debug("GEMS NLL Loss2d FWD")
     assert self.ndim == 4, "Invalid input ndim"
 
     shape = list(target.shape)
-    N, C, _, D = self.shape
-    assert shape == [N, 1, D], "Invalid target size"
-
+    N, C, D1, D2 = self.shape
+    assert shape == [N, D1, D2], "Invalid target size"
+    D = D1 * D2
     self = self.contiguous()
     target = target.contiguous()
     weight = None if weight is None else weight.contiguous()
@@ -384,9 +386,9 @@ def nll_loss2d_backward(
     ignore_index=-100,
     total_weight=None,
 ):
-    logging.debug("GEMS NLL Loss2d BWD")
-    N, C, _, D = self.shape
-
+    logger.debug("GEMS NLL Loss2d BWD")
+    N, C, D1, D2 = self.shape
+    D = D1 * D2
     grad_output = grad_output.contiguous()
     target = target.contiguous()
     weight = None if weight is None else weight.contiguous()

@@ -8,9 +8,12 @@ import triton.language as tl
 
 from flag_gems import runtime
 from flag_gems.runtime import torch_device_fn
-from flag_gems.utils import libentry
+from flag_gems.utils import libentry, libtuner
+from flag_gems.utils.limits import get_dtype_min
 
 from ..utils import TOTAL_CORE_NUM, cfggen_reduce_op, prune_reduce_config
+
+logger = logging.getLogger("flag_gems").getChild(__name__.lstrip("."))
 
 
 @libentry()
@@ -22,14 +25,15 @@ def max_kernel_float_once(
 ):
     offset = tl.arange(0, M)
     inp_val = tl.load(inp + offset)
-    max_val = tl.max(inp_val, 0, return_indices=True)
+    max_val = tl.max(inp_val, 0)
     tl.store(out, max_val)
 
 
 @libentry()
-@triton.autotune(
+@libtuner(
     configs=cfggen_reduce_op(),
     key=["M"],
+    strategy=["log"],
     prune_configs_by={"early_config_prune": prune_reduce_config},
 )
 @triton.heuristics(
@@ -50,7 +54,7 @@ def max_kernel_float(
         offset = block_start + tl.arange(0, BLOCK_SIZE)
         mask = offset < M
         inp_val = tl.load(inp + offset, mask=mask, other=-float("inf"))
-        res = tl.max(inp_val, 0, return_indices=True)
+        (res,) = tl.max(inp_val, 0, return_indices=True)
         tl.atomic_max(out, res)
     else:
         num_jobs = tl.num_programs(axis=0)
@@ -61,14 +65,15 @@ def max_kernel_float(
             mask = offset < M
             inp_val = tl.load(inp + offset, mask=mask, other=-float("inf"))
             _tmp = tl.where((inp_val > _tmp), inp_val, _tmp)
-        res = tl.max(_tmp, 0, return_indices=True)
+        (res,) = tl.max(_tmp, 0, return_indices=True)
         tl.atomic_max(out, res)
 
 
 @libentry()
-@triton.autotune(
+@libtuner(
     configs=cfggen_reduce_op(),
     key=["M"],
+    strategy=["log"],
     prune_configs_by={"early_config_prune": prune_reduce_config},
 )
 @triton.heuristics(
@@ -104,9 +109,10 @@ def max_kernel_int(
 
 
 @libentry()
-@triton.autotune(
+@libtuner(
     configs=cfggen_reduce_op(),
     key=["M"],
+    strategy=["log"],
     prune_configs_by={"early_config_prune": prune_reduce_config},
 )
 @triton.heuristics(
@@ -156,12 +162,13 @@ def heur_block_n(args):
 
 
 @libentry()
-@triton.autotune(
+@libtuner(
     configs=runtime.get_tuned_config("max"),
     key=[
         "M",
         "N",
     ],
+    strategy=["log", "log"],
 )
 @triton.jit
 def max_kernel(
@@ -173,20 +180,26 @@ def max_kernel(
     K,
     BLOCK_M: tl.constexpr,
     BLOCK_N: tl.constexpr,
+    UPCAST: tl.constexpr = False,
 ):
     # set offset
-    pid_m = tl.program_id(0)
-    pid_k = tl.program_id(1)
+    if UPCAST:
+        pid_m = tl.program_id(0).to(tl.int64)
+        pid_k = tl.program_id(1).to(tl.int64)
+    else:
+        pid_m = tl.program_id(0)
+        pid_k = tl.program_id(1)
     m_offset = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
     result_value = tl.full([BLOCK_M], value=-float("inf"), dtype=tl.float32)
     result_index = tl.zeros([BLOCK_M], dtype=tl.int64)
+    min_value = get_dtype_min(inp.type.element_ty)
     for i in range(0, N, BLOCK_N):
         n_offset = i + tl.arange(0, BLOCK_N)
         offset = m_offset[:, None] * N * K + n_offset[None, :] * K + pid_k
         # set mask
         mask = m_offset[:, None] < M and n_offset[None, :] < N
         inp_ptrs = inp + offset
-        inp_vals = tl.load(inp_ptrs, mask=mask, other=-float("inf"))
+        inp_vals = tl.load(inp_ptrs, mask=mask, other=min_value)
         max_value, max_index = tl.max(inp_vals, axis=1, return_indices=True)
         update_mask = max_value > result_value
         result_value = tl.where(update_mask, max_value, result_value)
@@ -201,7 +214,7 @@ def max_kernel(
 
 
 def max(inp):
-    logging.debug("GEMS_CAMBRICON MAX")
+    logger.debug("GEMS_CAMBRICON MAX")
     inp = inp.contiguous()
     M = inp.numel()
     dtype = inp.dtype
@@ -215,12 +228,7 @@ def max(inp):
                 out = torch.empty([], dtype=dtype, device=device)
                 max_kernel_float_once[(1, 1, 1)](inp, out, M)
             else:
-                out = torch.full(
-                    [],
-                    torch.finfo(torch.float32).min,
-                    dtype=torch.float32,
-                    device=device,
-                )
+                out = torch.full([], float("-inf"), dtype=torch.float32, device=device)
                 max_kernel_float[grid](inp, out, M)
         elif dtype == torch.int64:
             mid = torch.empty([mid_size], dtype=dtype, device=device)
@@ -238,7 +246,7 @@ def max(inp):
 
 
 def max_dim(inp, dim=None, keepdim=False):
-    logging.debug("GEMS_CAMBRICON MAX DIM")
+    logger.debug("GEMS_CAMBRICON MAX DIM")
     assert dim >= -inp.ndim and dim < inp.ndim, "Invalid dim"
     shape = inp.shape
     dim = dim % inp.ndim
@@ -256,13 +264,14 @@ def max_dim(inp, dim=None, keepdim=False):
     if not keepdim:
         out_value = torch.squeeze(out_value, dim)
         out_index = torch.squeeze(out_index, dim)
+    UPCAST = inp.shape[0] * inp.stride(0) >= 1 << 31
 
     grid = lambda meta: (
         triton.cdiv(M, meta["BLOCK_M"]),
         K,
     )
     with torch_device_fn.device(inp.device):
-        max_kernel[grid](inp, out_value, out_index, M, N, K)
+        max_kernel[grid](inp, out_value, out_index, M, N, K, UPCAST=UPCAST)
     Max_out = namedtuple("max", ["values", "indices"])
     out = Max_out(values=out_value, indices=out_index)
     return out

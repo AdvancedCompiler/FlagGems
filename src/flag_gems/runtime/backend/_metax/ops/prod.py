@@ -7,8 +7,10 @@ import triton.language as tl
 
 from flag_gems import runtime
 from flag_gems.runtime import torch_device_fn
-from flag_gems.utils import libentry
+from flag_gems.utils import libentry, libtuner
 from flag_gems.utils import triton_lang_extension as tle
+
+logger = logging.getLogger("flag_gems." + __name__)
 
 
 @triton.jit
@@ -46,7 +48,7 @@ def prod_kernel_result(mid, out, mid_size, BLOCK_MID: tl.constexpr):
 
 
 def prod(inp, *, dtype=None):
-    logging.debug("GEMS PROD")
+    logger.debug("METAX GEMS PROD")
     if dtype is None:
         dtype = inp.dtype
 
@@ -69,7 +71,7 @@ def heur_block_n(args):
 
 
 @libentry()
-@triton.autotune(
+@libtuner(
     configs=runtime.get_tuned_config("prod"),
     key=[
         "M",
@@ -115,7 +117,7 @@ def prod_kernel(
 
 
 def prod_dim(inp, dim=None, keepdim=False, *, dtype=None):
-    logging.debug("GEMS PROD DIM")
+    logger.debug("METAX GEMS PROD DIM")
 
     assert dim >= -inp.ndim and dim < inp.ndim, "Invalid dim"
     shape = inp.shape

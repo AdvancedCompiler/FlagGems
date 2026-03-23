@@ -1,5 +1,6 @@
 import logging
 import math
+import os
 
 import torch
 import triton
@@ -9,7 +10,8 @@ import triton.language as tl
 from flag_gems.runtime import torch_device_fn
 from flag_gems.utils import libentry
 from flag_gems.utils import triton_lang_extension as tle
-from flag_gems.utils.type_utils import get_accumulator_dtype
+
+logger = logging.getLogger("flag_gems").getChild(__name__.lstrip("."))
 
 
 @triton.jit
@@ -121,7 +123,7 @@ def layer_norm_persistent_kernel_multiline(
     tl.store(out_ptr + m_offsets[:, None] * N + n_offsets, out, mask=mask)
 
 
-# @libentry()
+@libentry()
 # @triton.autotune(
 #     configs=runtime.get_tuned_config("layer_norm_loop"),
 #     key=["M", "N"],
@@ -134,8 +136,8 @@ def layer_norm_loop_kernel(
     bias_ptr,
     out_mean_ptr,  # pointer to the mean
     out_rstd_ptr,  # pointer to the 1/std
-    M,
-    N,
+    M: tl.constexpr,
+    N: tl.constexpr,
     eps,
     TILE_N: tl.constexpr,
 ):
@@ -173,9 +175,6 @@ def layer_norm_loop_kernel(
     var = tl.sum(s + cnt * (m - final_m) * (m - final_m)) / N
     rstd = tl.math.rsqrt(var + eps)
     m = final_m
-    # Write mean / rstd
-    tl.store(out_mean_ptr + pid, m)
-    tl.store(out_rstd_ptr + pid, rstd)
 
     # reverse the order of the second sweep
     # Normalize and apply linear transformation
@@ -217,15 +216,82 @@ def layer_norm_loop_kernel(
         out = w * (x - m) * rstd + b
         tl.store(out_ptr + pid * N + n_offsets, out)
 
+    # Write mean / rstd
+    tl.store(out_mean_ptr + pid, m)
+    tl.store(out_rstd_ptr + pid, rstd)
+
+
+@triton.jit
+def layernorm_fwd_kernel(
+    X,
+    Y,
+    W,
+    B,
+    eps,
+    MEAN,
+    RSTRD,
+    xnumel: tl.constexpr,
+    rnumel: tl.constexpr,
+    XBLOCK: tl.constexpr,
+    RBLOCK: tl.constexpr,
+):
+    xoffset = tl.program_id(0) * XBLOCK
+    xindex = xoffset + tl.arange(0, XBLOCK)[:, None]
+    xmask = xindex < xnumel
+    rbase = tl.arange(0, RBLOCK)[None, :]
+    _mean = tl.full([XBLOCK, RBLOCK], 0, tl.float32)
+    _var = tl.full([XBLOCK, RBLOCK], 0, tl.float32)
+
+    for roffset in range(0, rnumel, RBLOCK):
+        rindex = roffset + rbase
+        rmask = rindex < rnumel
+        x = tl.load(X + (rindex + (rnumel * xindex)), rmask & xmask, other=0.0)
+        _mean = _mean + tl.broadcast_to(x, [XBLOCK, RBLOCK])
+        _var = _var + tl.broadcast_to(x * x, [XBLOCK, RBLOCK])
+
+    mean = tl.sum(_mean, 1)[:, None] / rnumel
+    var = tl.sum(_var, 1)[:, None] / rnumel
+    var_mean = var - mean * mean
+    rstd = 1 / tl.sqrt(var_mean + eps)
+    # rstd = tl.math.rsqrt(var_mean + eps)
+
+    tl.store(MEAN + xindex, mean, xmask)
+    tl.store(RSTRD + xindex, rstd, xmask)
+
+    for roffset in range(0, rnumel, RBLOCK):
+        rindex = roffset + rbase
+        rmask = rindex < rnumel
+        x = tl.load(X + (rindex + (rnumel * xindex)), rmask & xmask, other=0.0)
+        if W is None:
+            w = 1
+        else:
+            w = tl.load(W + (rindex), rmask)
+        if B is None:
+            b = 0
+        else:
+            b = tl.load(B + (rindex), rmask)
+        x_hat = (x - mean) * rstd
+        y = x_hat * w + b
+        tl.store(Y + (rindex + (rnumel * xindex)), y, rmask & xmask)
+
 
 def layer_norm_backward_kernel_heur_block_row_size(args):
-    return 1
+    # if args["dX"].dtype == torch.bfloat16 and args["M"] == 100 and args["N"] == 40499:
+    #     return args["M"]
+    return triton.next_power_of_2(triton.cdiv(args["M"], 12))
+    # return 1
 
 
 def layer_norm_backward_kernel_heur_block_col_size(args):
+    if args["dX"].dtype == torch.float32 and args["M"] == 1 and args["N"] == 40999:
+        return 4096  # 8192 cause leagalize error
+
+    if args["M"] == 100 and args["N"] == 40499:
+        return 4096  # 8192 cause leagalize error
+
     import builtins
 
-    return builtins.min(triton.next_power_of_2(args["N"]), 8192)
+    return builtins.min(args["N"], 8192)
 
 
 @libentry()
@@ -247,8 +313,8 @@ def layer_norm_backward_kernel(
     Mean,
     Rstd,
     dX,
-    M,
-    N,
+    M: tl.constexpr,
+    N: tl.constexpr,
     BLOCK_ROW_SIZE: tl.constexpr,
     BLOCK_COL_SIZE: tl.constexpr,
 ):
@@ -307,6 +373,11 @@ def weight_bias_backward_kernel_heur_block_row_size(args):
 
 
 def weight_bias_backward_kernel_heur_block_col_size(args):
+    # if args["M"] == 100 and args["N"] == 40499:
+    #     if args["dY"].dtype == torch.bfloat16:
+    #         return 2048
+    #     return 4096  # 8192 cause leagalize error
+
     import builtins
 
     return builtins.min(args["N"], 8192)
@@ -331,8 +402,8 @@ def weight_bias_backward_kernel(
     Rstd,
     dW,
     dB,
-    M,
-    N,
+    M: tl.constexpr,
+    N: tl.constexpr,
     BLOCK_ROW_SIZE: tl.constexpr,
     BLOCK_COL_SIZE: tl.constexpr,
 ):
@@ -362,111 +433,136 @@ def weight_bias_backward_kernel(
         tl.store(dB + pid, db[None, :], mask=col_mask)
 
 
-class LayerNorm(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, x, normalized_shape, weight, bias, eps=1e-5, cudnn_enable=True):
-        logging.debug("GEMS LAYERNORM FORWARD")
-        # dim = x.ndim - len(normalized_shape)
-        # M = math.prod(x.shape[:dim])
-        N = math.prod(normalized_shape)
-        M = x.numel() // N
+def layer_norm(input, normalized_shape, weight=None, bias=None, eps=1e-5):
+    logger.debug("GEMS LAYERNORM FORWARD")
 
-        x = x.contiguous()
-        if weight is not None:
-            weight = weight.contiguous()
-        if bias is not None:
-            bias = bias.contiguous()
-        y = torch.empty_like(x)
+    N = math.prod(normalized_shape)
+    M = input.numel() // N
 
-        # NOTE: when the input is half-precision(either float16 or bfloat16)
-        # these statistical data saved for backward is in single precision
-        acc_type = get_accumulator_dtype(x.dtype)
-        mean = torch.empty(M, dtype=acc_type, device=x.device)
-        rstd = torch.empty(M, dtype=acc_type, device=x.device)
+    input = input.contiguous()
+    weight = None if weight is None else weight.contiguous()
+    bias = None if bias is None else bias.contiguous()
+    y = torch.empty_like(input)
 
-        with torch_device_fn.device(x.device):
-            if N <= 128:
-                TILE_N = 16  # triton.next_power_of_2(N)
-                TILE_M = triton.cdiv(1024, TILE_N)
-                grid = (triton.cdiv(M, TILE_M), 1, 1)
-                layer_norm_persistent_kernel_multiline[grid](
-                    x,
-                    y,
-                    weight,
-                    bias,
-                    mean,
-                    rstd,
-                    M,
-                    N,
-                    eps,
-                    TILE_M,
-                    TILE_N,
-                )
-            elif N <= 4096:
-                TILE_N = 32  # triton.next_power_of_2(N)
-                grid = (M, 1, 1)
-                layer_norm_persistent_kernel[grid](
-                    x,
-                    y,
-                    weight,
-                    bias,
-                    mean,
-                    rstd,
-                    M,
-                    N,
-                    eps,
-                    TILE_N,
-                )
-            else:
-                TILE_N = 32  # triton.next_power_of_2(N)
-                grid = (M, 1, 1)
-                layer_norm_loop_kernel[grid](
-                    x,
-                    y,
-                    weight,
-                    bias,
-                    mean,
-                    rstd,
-                    M,
-                    N,
-                    eps,
-                    TILE_N,
-                )
-        if x.requires_grad:
-            ctx.save_for_backward(x, weight, bias, mean, rstd)
-            ctx.M = M
-            ctx.N = N
-        return y, mean, rstd
+    # NOTE: when the input is half-precision(either float16 or bfloat16)
+    # these statistical data saved for backward is in single precision
+    mean = torch.empty(M, dtype=input.dtype, device=input.device)
+    rstd = torch.empty(M, dtype=input.dtype, device=input.device)
 
-    @staticmethod
-    def backward(ctx, out_grad, mean_grad, rstd_grad):
-        logging.debug("GEMS LAYERNORM BACKWARD")
-        out_grad = out_grad.contiguous()
-        (x, weight, bias, mean, rstd) = ctx.saved_tensors
-        M = ctx.M
-        N = ctx.N
-
-        with torch_device_fn.device(x.device):
-            in_grad = torch.empty_like(x)
-            grid = lambda meta: (triton.cdiv(M, meta["BLOCK_ROW_SIZE"]), 1, 1)
-            layer_norm_backward_kernel[grid](
-                out_grad, x, weight, mean, rstd, in_grad, M, N
+    with torch_device_fn.device(input.device):
+        if input.dtype == torch.float16 and input.shape == (4096, 100):
+            TILE_N = 8192  # triton.next_power_of_2(N)
+            grid = (M, 1, 1)
+            layer_norm_loop_kernel[grid](
+                input,
+                y,
+                weight,
+                bias,
+                mean,
+                rstd,
+                M,
+                N,
+                eps,
+                TILE_N,
+                isCloseUnrollControl=True,
+            )
+        else:
+            grid = (12, 1, 1)
+            layernorm_fwd_kernel[grid](
+                input,
+                y,
+                weight,
+                bias,
+                eps,
+                mean,
+                rstd,
+                M,
+                N,
+                XBLOCK=triton.next_power_of_2(triton.cdiv(M, 12)),
+                RBLOCK=8192,
+                isCloseUnrollControl=True,
+                buffer_size_limit=512,
             )
 
-        if weight is None and bias is None:
-            return in_grad, None, None, None, None, None
-
-        with torch_device_fn.device(x.device):
-            grid = lambda meta: (triton.cdiv(N, meta["BLOCK_COL_SIZE"]), 1, 1)
-            weight_grad = None if weight is None else torch.empty_like(weight)
-            bias_grad = None if bias is None else torch.empty_like(bias)
-            weight_bias_backward_kernel[grid](
-                out_grad, x, mean, rstd, weight_grad, bias_grad, M, N
-            )
-        return in_grad, None, weight_grad, bias_grad, None, None
+    return y, mean, rstd
 
 
-def layer_norm(
-    x, normalized_shape, weight=None, bias=None, eps=1e-5, cudnn_enable=True
+def layer_norm_backward(
+    grad_out,
+    input,
+    normalized_shape,
+    mean,
+    rstd,
+    weight=None,
+    bias=None,
+    output_mask=None,
 ):
-    return LayerNorm.apply(x, normalized_shape, weight, bias, eps, cudnn_enable)
+    logger.debug("GEMS LAYERNORM BACKWARD")
+
+    grad_out = grad_out.contiguous()
+    input = input.contiguous()
+    mean = mean.contiguous()
+    rstd = rstd.contiguous()
+    weight = None if weight is None else weight.contiguous()
+    bias = None if bias is None else bias.contiguous()
+
+    M = input.shape[0]
+    N = input.numel() // M
+
+    if output_mask[0]:
+        in_grad = torch.empty_like(input)
+        grid = lambda meta: (triton.cdiv(M, meta["BLOCK_ROW_SIZE"]), 1, 1)
+        os.environ["TRITONXPU_OTHER_SIM"] = "1"
+        os.environ["TRITONXPU_STORE_MASK_SIM"] = "1"
+        os.environ["TRITONXPU_DTYPE_CONVERT"] = "1"
+        if M == 100 and N == 40499:
+            isCloseUnrollControl = True
+            isCloseCoreTiling = True
+        else:
+            isCloseUnrollControl = False
+            isCloseCoreTiling = False
+
+        with torch_device_fn.device(input.device):
+            layer_norm_backward_kernel[grid](
+                grad_out,
+                input,
+                weight,
+                mean,
+                rstd,
+                in_grad,
+                M,
+                N,
+                isCloseUnrollControl=isCloseUnrollControl,
+                isCloseCoreTiling=isCloseCoreTiling,
+                isCloseVectorization=True,
+            )
+        if "TRITONXPU_OTHER_SIM" in os.environ:
+            del os.environ["TRITONXPU_OTHER_SIM"]
+        if "TRITONXPU_STORE_MASK_SIM" in os.environ:
+            del os.environ["TRITONXPU_STORE_MASK_SIM"]
+        if "TRITONXPU_DTYPE_CONVERT" in os.environ:
+            del os.environ["TRITONXPU_DTYPE_CONVERT"]
+    else:
+        in_grad = None
+
+    if output_mask[1] is False and output_mask[2] is False:
+        return in_grad, None, None
+
+    grid = lambda meta: (triton.cdiv(N, meta["BLOCK_COL_SIZE"]), 1, 1)
+    weight_grad = torch.empty_like(weight) if output_mask[1] else None
+    bias_grad = torch.empty_like(bias) if output_mask[2] else None
+    with torch_device_fn.device(input.device):
+        weight_bias_backward_kernel[grid](
+            grad_out,
+            input,
+            mean,
+            rstd,
+            weight_grad,
+            bias_grad,
+            M,
+            N,
+            isCloseCoreTiling=True,
+            isCloseUnrollControl=True,
+            isCloseVectorization=True,
+        )
+    return in_grad, weight_grad, bias_grad

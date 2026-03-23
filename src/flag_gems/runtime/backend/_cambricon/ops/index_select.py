@@ -6,9 +6,11 @@ import triton
 import triton.language as tl
 
 from flag_gems import runtime
-from flag_gems.utils import libentry
+from flag_gems.utils import libentry, libtuner
 
 from ..utils import MAX_NRAM_SIZE, TOTAL_CORE_NUM
+
+logger = logging.getLogger("flag_gems").getChild(__name__.lstrip("."))
 
 
 def get_max_block_size(dtype_size):
@@ -53,13 +55,13 @@ def ld_st_1(indices, N: tl.constexpr, weight_ptr, in_mask, in_offsets, out_ptr):
 
 
 @libentry()
-@triton.autotune(
+@libtuner(
     configs=[
         # [512, 65536]
         triton.Config(kwargs={"BLOCK_SIZE": 512 * 2**i}, num_stages=1, num_warps=1)
-        for i in range(8)
+        for i in range(0, 8, 2)
     ],
-    key=["N", "in_n_elements"],
+    key=["N"],
     prune_configs_by={
         "early_config_prune": config_prune,
     },
@@ -68,7 +70,7 @@ def ld_st_1(indices, N: tl.constexpr, weight_ptr, in_mask, in_offsets, out_ptr):
 def one_batch_index_select_kernel(  # 2D
     out_ptr,
     in_ptr,
-    in_n_elements: tl.constexpr,
+    in_n_elements,
     weight_ptr,
     N: tl.constexpr,
     dtype_size,
@@ -193,7 +195,7 @@ def ld_st_2(
 
 
 @libentry()
-@triton.autotune(
+@libtuner(
     configs=runtime.get_tuned_config("index_select"),
     key=["batch_dim", "index_dim", "c_dim"],
     prune_configs_by={"early_config_prune": config_prune},
@@ -290,7 +292,7 @@ def multi_batch_index_select_kernel(
 
 
 def index_select(inp, dim, index):
-    logging.debug("GEMS_CAMBRICON INDEX SELECT")
+    logger.debug("GEMS_CAMBRICON INDEX SELECT")
     assert dim >= -inp.ndim and dim < inp.ndim, "Invalid dim"
     assert index.ndim <= 1, "Index should have dimension 1 or 0"
     # TODO: index is on device, should it be a kernel (like cnnl __assert_fail__) to check this?
@@ -307,6 +309,7 @@ def index_select(inp, dim, index):
     # input  [batch_dim, select_dim, c_dim]
     # output [batch_dim, index_dim, c_dim]
     inp = inp.contiguous()
+    index = index.contiguous()
     inp_numel = inp.numel()
     batch_dim = math.prod(inp_shape[:dim])
     select_dim = inp_shape[dim]

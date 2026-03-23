@@ -9,9 +9,14 @@ from flag_gems.runtime import torch_device_fn
 from flag_gems.utils import libentry
 from flag_gems.utils import triton_lang_extension as tle
 
+logger = logging.getLogger("flag_gems").getChild(__name__.lstrip("."))
+
 
 def heur_group_m(args):
-    return 1
+    if args["TILE_M"] > args["TILE_N"]:
+        return 1
+    else:
+        return (args["M"] + args["TILE_M"] - 1) // args["TILE_M"]
 
 
 def heur_divisible_m(args):
@@ -140,12 +145,29 @@ def bmm_kernel(
 
 
 def bmm(A, B):
-    logging.debug("GEMS BMM")
+    logger.debug("GEMS BMM")
     batch, M, K = A.shape
     _, _, N = B.shape
     A = A.contiguous()
     B = B.contiguous()
     out = torch.empty((batch, M, N), dtype=A.dtype, device=A.device)
+
+    grid_fn = lambda meta: (
+        triton.cdiv(meta["M"], meta["TILE_M"]),
+        triton.cdiv(meta["N"], meta["TILE_N"]),
+        batch,
+    )
+    with torch_device_fn.device(A.device):
+        bmm_kernel[grid_fn](A, B, out, M, N, K)
+    return out
+
+
+def bmm_out(A, B, out):
+    logger.debug("GEMS BMM_OUT")
+    assert A.shape[0] == B.shape[0] == out.shape[0], "Batch dim mismatch"
+    assert A.shape[2] == B.shape[1], "K dim mismatch"
+    batch, M, K = A.shape
+    _, _, N = B.shape
 
     grid_fn = lambda meta: (
         triton.cdiv(meta["M"], meta["TILE_M"]),

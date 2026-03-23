@@ -3,7 +3,9 @@ import logging
 import torch
 import triton
 
-from ..utils import pointwise_dynamic
+from flag_gems.utils import pointwise_dynamic
+
+logger = logging.getLogger(__name__)
 
 
 @pointwise_dynamic(promotion_methods=[(0, 1, "DEFAULT")])
@@ -19,7 +21,7 @@ def mul_func_scalar(x, y):
 
 
 def mul(A, B):
-    logging.debug("GEMS MUL")
+    logger.debug("GEMS MUL")
     if isinstance(A, torch.Tensor) and isinstance(B, torch.Tensor):
         return mul_func(A, B)
     elif isinstance(A, torch.Tensor):
@@ -29,3 +31,11 @@ def mul(A, B):
     else:
         # Both scalar
         return torch.tensor(A * B)
+
+
+def mul_(A, B):
+    logger.debug("GEMS MUL_")
+    if isinstance(B, torch.Tensor):
+        return mul_func(A, B, out0=A)
+    else:
+        return mul_func_scalar(A, B, out0=A)

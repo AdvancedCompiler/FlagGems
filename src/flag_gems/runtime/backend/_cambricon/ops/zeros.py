@@ -9,6 +9,7 @@ from flag_gems.utils.shape_utils import volume
 
 from ..utils import TOTAL_CORE_NUM
 
+logger = logging.getLogger("flag_gems").getChild(__name__.lstrip("."))
 device_ = device
 
 
@@ -39,7 +40,7 @@ def zeros_kernel(
 
 
 def zeros(size, *, dtype=None, layout=None, device=None, pin_memory=None):
-    logging.debug("GEMS_CAMBRICON ZEROS")
+    logger.debug("GEMS_CAMBRICON ZEROS")
     if dtype is None:
         dtype = torch.get_default_dtype()
     if device is None:
@@ -51,3 +52,12 @@ def zeros(size, *, dtype=None, layout=None, device=None, pin_memory=None):
     with torch_device_fn.device(device):
         zeros_kernel[grid_fn](out, N)
     return out
+
+
+def zero_(x: torch.Tensor) -> torch.Tensor:
+    logger.debug("GEMS_CAMBRICON ZERO_")
+    N = x.numel()
+    grid_fn = lambda meta: (min(triton.cdiv(N, meta["BLOCK_SIZE"]), TOTAL_CORE_NUM),)
+    with torch_device_fn.device(x.device):
+        zeros_kernel[grid_fn](x, N)
+    return x

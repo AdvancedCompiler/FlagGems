@@ -9,6 +9,8 @@ from flag_gems.runtime import torch_device_fn
 from flag_gems.utils import libentry
 from flag_gems.utils import triton_lang_extension as tle
 
+logger = logging.getLogger("flag_gems").getChild(__name__.lstrip("."))
+
 
 def nonzero_kernel_heur_block_size(args):
     return triton.next_power_of_2(triton.cdiv(args["n_elements"], 12))  # cluster_num
@@ -31,7 +33,7 @@ def nonzero_kernel(
     inp,
     prefix_sum,
     out,
-    n_elements,
+    n_elements: tl.constexpr,
     shape,
     ndim: tl.constexpr,
     BLOCK_SIZE: tl.constexpr,
@@ -41,10 +43,10 @@ def nonzero_kernel(
     offset = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     mask = offset < n_elements
 
-    inp_vals = tl.load(inp + offset, mask=mask)
+    inp_vals = tl.load(inp + offset, mask=mask).to(tl.int1)
     out_offset = tl.load(prefix_sum + offset, mask=mask) - 1
 
-    nonzero_mask = mask and inp_vals == True  # noqa
+    nonzero_mask = mask and inp_vals  # noqa
 
     idx_flat = offset
     for dim in range(ndim - 1, -1, -1):
@@ -55,7 +57,7 @@ def nonzero_kernel(
 
 
 def nonzero(inp, *, as_tuple=False):
-    logging.debug("GEMS NONZERO")
+    logger.debug("GEMS NONZERO")
 
     inp_ndim = inp.ndim
 
@@ -76,7 +78,16 @@ def nonzero(inp, *, as_tuple=False):
 
     grid = lambda meta: (triton.cdiv(n_elements, meta["BLOCK_SIZE"]),)
     with torch_device_fn.device(inp.device):
-        nonzero_kernel[grid](inp_bool, prefix_sum, out, n_elements, shape, inp_ndim)
+        nonzero_kernel[grid](
+            inp_bool,
+            prefix_sum,
+            out,
+            n_elements,
+            shape,
+            inp_ndim,
+            isCloseUnrollControl=True,
+            is_use_mask_zero=True,
+        )
 
     num_nonzeros = prefix_sum[n_elements - 1].item()
     out = out[0:num_nonzeros]

@@ -6,8 +6,14 @@ from typing import Any, Callable, List, Mapping, Tuple
 import torch
 
 from flag_gems.utils.code_cache import code_cache_dir
-from flag_gems.utils.code_utils import IndentedBuffer
-from flag_gems.utils.shape_utils import has_internal_overlapping, restride_dim
+from flag_gems.utils.code_utils import IndentedBuffer, write_atomic
+from flag_gems.utils.shape_utils import (
+    MemOverlap,
+    has_internal_overlapping,
+    restride_dim,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def generate_imports(code: IndentedBuffer) -> IndentedBuffer:
@@ -36,7 +42,7 @@ def generate_scatter_kernel(
 
     code.writeline("def heur_block(args):")
     with code.indent():
-        code.writeline("if(flag_gems.vendor_name=='metax'):")
+        code.writeline("if(flag_gems.vendor_name in ['metax', 'iluvatar']):")
         with code.indent():
             code.writeline("return 256")
         code.writeline("return 128")
@@ -295,15 +301,14 @@ class ScatterFunction:
                 code,
             )
 
-            file_name = f"scatter_rank_{key}_pid_{self.pid}.py"
-
-            with open(code_cache_dir() / file_name, "wt", encoding="utf-8") as f:
-                f.write(code.getvalue())
+            file_name = f"scatter_rank_{key}.py"
+            file_path = code_cache_dir() / file_name
+            write_atomic(file_path, code.getvalue())
 
             # load
             spec = importlib.util.spec_from_file_location(
-                f"_gen_module_rank_{key}_pid_{self.pid}",
-                f.name,
+                f"_gen_module_rank_{key}",
+                file_path,
             )
 
             m = importlib.util.module_from_spec(spec)
@@ -323,7 +328,7 @@ _scatter_func = ScatterFunction()
 
 
 def scatter(inp, dim, index, src, reduce=None):
-    logging.debug("GEMS SCATTER")
+    logger.debug("GEMS SCATTER")
     out = inp.clone()
 
     if reduce is not None:
@@ -331,7 +336,7 @@ def scatter(inp, dim, index, src, reduce=None):
             torch.bfloat16,
         ), "Unsupported operation: reduce scatter bfloat tensors."
 
-    if has_internal_overlapping(out):
+    if has_internal_overlapping(out) == MemOverlap.Yes:
         out = out.contiguous()
 
     src_strided = src.as_strided(index.shape, src.stride())
@@ -358,7 +363,7 @@ def scatter(inp, dim, index, src, reduce=None):
 
 
 def scatter_(inp, dim, index, src, reduce=None):
-    logging.debug("GEMS SCATTER_")
+    logger.debug("GEMS SCATTER_")
     out = inp
 
     if reduce is not None:
@@ -366,8 +371,8 @@ def scatter_(inp, dim, index, src, reduce=None):
             torch.bfloat16,
         ), "Unsupported operation: reduce scatter bfloat tensors."
 
-    assert not has_internal_overlapping(
-        out
+    assert (
+        has_internal_overlapping(out) != MemOverlap.Yes
     ), "Unsupported operation: trying to inplace write to an internally overlapping tensor."
 
     src_restrided = src.as_strided(index.shape, src.stride())

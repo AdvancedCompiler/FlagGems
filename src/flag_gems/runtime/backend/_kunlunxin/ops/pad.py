@@ -8,6 +8,8 @@ import torch
 from flag_gems.utils.code_cache import cache_dir
 from flag_gems.utils.code_utils import IndentedBuffer
 
+logger = logging.getLogger("flag_gems").getChild(__name__.lstrip("."))
+
 
 # --------------------------- padding wrapper genration -----------------------------------
 def parameter_for_wrapper() -> str:
@@ -168,12 +170,9 @@ def generate_destination_passing_padding_wrapper(
 
         # grid
         code.writeline("# kernel launch")
-        code.writeline("if not IS_CIRCULAR: ")
-        # code.writeline("import pudb; pudb.set_trace()")
-        with code.indent():
-            code.writeline("import os")
-            code.writeline('os.environ["TRITONXPU_OTHER_SIM"] = "1"')
-            code.writeline('os.environ["TRITONXPU_STORE_MASK_SIM"] = "1"')
+        code.writeline("import os")
+        code.writeline('os.environ["TRITONXPU_OTHER_SIM"] = "1"')
+        code.writeline('os.environ["TRITONXPU_STORE_MASK_SIM"] = "1"')
         # launch kernel
         code.writeline("with torch_device_fn.device(in0.device):")
         with code.indent():
@@ -299,12 +298,12 @@ def generate_pad_kernel(
         code.writeline("if_pad_true_mask = tl.full((BLOCK_SIZE, ), 1, dtype=tl.int32)")
 
         code.writeline(
-            "cond = (dst_index_0 >= valid_dim0_start and dst_index_0 < valid_dim0_end) "
+            "cond = ((dst_index_0 >= valid_dim0_start) & (dst_index_0 < valid_dim0_end))"
         )
 
         for i in range(1, rank):
             code.writeline(
-                f"cond &= (dst_index_{i} >= valid_dim{i}_start and dst_index_{i} < valid_dim{i}_end)"
+                f"cond &= ((dst_index_{i} >= valid_dim{i}_start) & (dst_index_{i} < valid_dim{i}_end))"
             )
 
         code.writeline(
@@ -372,7 +371,7 @@ def generate_pad_kernel(
         code.writeline("if IS_CONSTANT: ")
         with code.indent():
             code.writeline(
-                "x_val = tl.load(in0_ptr + src_offset, mask=(not if_pad) and load_cond, other=value)"
+                "x_val = tl.load(in0_ptr + src_offset, mask=((if_pad == 0) & load_cond), other=value)"
             )
         code.writeline("else: ")
         with code.indent():
@@ -461,7 +460,7 @@ _pad_func = PadFunction()
 
 
 def pad(self, pad, mode="constant", value=None):
-    logging.debug("GEMS CONSTANT PAD ND")
+    logger.debug("GEMS CONSTANT PAD ND")
 
     ndim = self.ndim
 

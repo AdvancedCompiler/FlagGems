@@ -8,10 +8,12 @@ from typing import Callable, List, Mapping, Tuple, Union
 import torch
 
 from flag_gems.utils.code_cache import cache_dir
-from flag_gems.utils.code_utils import IndentedBuffer
+from flag_gems.utils.code_utils import IndentedBuffer, write_atomic
 
 from ..utils import TOTAL_CORE_NUM
 from .vstack import vstack
+
+logger = logging.getLogger("flag_gems").getChild(__name__.lstrip("."))
 
 
 def get_dtype_size(dtype):
@@ -425,7 +427,7 @@ class StackKernelCode(IndentedBuffer):
             + "\n"
             + f"""\
             else:
-                buffer[low_idx,:] = tl.load(in_{tensor_num-1}+load_start+LOW_OFFSET)"""
+                buffer[low_idx,:] = tl.load(in_{tensor_num - 1}+load_start+LOW_OFFSET)"""
         )
         self.tpl(
             textwrap.dedent(tpl),
@@ -433,13 +435,13 @@ class StackKernelCode(IndentedBuffer):
             tensors=tensors,
             low_gt_64_code="\n".join(
                 [
-                    f"{' '*8}buffer[:,{idx},:]=tl.load(in_{idx}+offset+buffer_offset)"
+                    f"{' ' * 8}buffer[:,{idx},:]=tl.load(in_{idx}+offset+buffer_offset)"
                     for idx in range(tensor_num)
                 ]
             ),
             low_le_64_code="\n".join(
                 [
-                    f"{' '*8}buffer[{idx},:,:]=tl.load(in_{idx}+offset+buffer_offset)"
+                    f"{' ' * 8}buffer[{idx},:,:]=tl.load(in_{idx}+offset+buffer_offset)"
                     for idx in range(tensor_num)
                 ]
             ),
@@ -461,7 +463,7 @@ class StackKernelCode(IndentedBuffer):
                     + "\n"
                     + f"""\
                 else:
-                    x = tl.load(in_{tensor_num-1}+high_idx *low+offset_in_loop,mask=offset_in_loop<low)"""
+                    x = tl.load(in_{tensor_num - 1}+high_idx *low+offset_in_loop,mask=offset_in_loop<low)"""
                 ),
                 8,
             ),
@@ -496,11 +498,10 @@ class StackKernelCode(IndentedBuffer):
             # generate code and cache.
             self.__gen_code(tensor_num, high, low, dtype)
             file_name = f"{cache_dir()}/stack_{key}_pid_{self.pid}.py"
-            with open(file_name, "wt", encoding="utf-8") as f:
-                f.write(self.getvalue())
+            write_atomic(file_name, self.getvalue())
             # load
             spec = importlib.util.spec_from_file_location(
-                f"_gen_module_{key}_pid_{self.pid}", f.name
+                f"_gen_module_{key}_pid_{self.pid}", file_name
             )
             m = importlib.util.module_from_spec(spec)
             # do not expose it to sys.modules
@@ -515,7 +516,7 @@ class StackKernelCode(IndentedBuffer):
 def stack(
     tensors: Union[Tuple[torch.Tensor, ...], List[torch.Tensor]], dim: int = 0
 ) -> torch.Tensor:
-    logging.debug("GEMS_CAMBRICON STACK")
+    logger.debug("GEMS_CAMBRICON STACK")
 
     if len(tensors) == 0:
         raise RuntimeError("stack expected a non-empty TensorList")
@@ -531,7 +532,7 @@ def stack(
             )
         if s != inp0_shape:
             raise RuntimeError(
-                f"stack expects each tensor to be equal size, but got {inp0_shape} at entry 0 and {s} at entry {i+1}"
+                f"stack expects each tensor to be equal size, but got {inp0_shape} at entry 0 and {s} at entry {i + 1}"
             )
 
     if dim < 0:
