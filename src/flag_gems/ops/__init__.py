@@ -1,4 +1,5 @@
 from flag_gems.ops.abs import abs, abs_
+from flag_gems.ops.absolute import absolute
 from flag_gems.ops.acos import acos
 from flag_gems.ops.add import add, add_
 from flag_gems.ops.addcdiv import addcdiv
@@ -110,6 +111,7 @@ from flag_gems.ops.glu import glu, glu_backward
 from flag_gems.ops.groupnorm import group_norm, group_norm_backward
 from flag_gems.ops.gt import gt, gt_scalar
 from flag_gems.ops.hstack import hstack
+from flag_gems.ops.hypot import hypot, hypot_out
 from flag_gems.ops.index import index
 from flag_gems.ops.index_add import index_add, index_add_
 from flag_gems.ops.index_put import index_put, index_put_
@@ -206,6 +208,7 @@ from flag_gems.ops.scaled_softmax import scaled_softmax_backward, scaled_softmax
 from flag_gems.ops.scatter import scatter, scatter_
 from flag_gems.ops.scatter_add_ import scatter_add_
 from flag_gems.ops.select_scatter import select_scatter
+from flag_gems.ops.sgn_ import sgn_
 from flag_gems.ops.sigmoid import sigmoid, sigmoid_, sigmoid_backward
 from flag_gems.ops.silu import silu, silu_, silu_backward
 from flag_gems.ops.sin import sin, sin_
@@ -257,6 +260,7 @@ __all__ = [
     "_upsample_bicubic2d_aa",
     "abs",
     "abs_",
+    "absolute",
     "acos",
     "add",
     "add_",
@@ -384,6 +388,8 @@ __all__ = [
     "gt",
     "gt_scalar",
     "hstack",
+    "hypot",
+    "hypot_out",
     "index",
     "index_add",
     "index_add_",
@@ -501,6 +507,7 @@ __all__ = [
     "scatter_",
     "scatter_add_",
     "select_scatter",
+    "sgn_",
     "sigmoid",
     "sigmoid_",
     "sigmoid_backward",
