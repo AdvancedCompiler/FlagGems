@@ -112,6 +112,7 @@ from flag_gems.ops.groupnorm import group_norm, group_norm_backward
 from flag_gems.ops.gt import gt, gt_scalar
 from flag_gems.ops.hstack import hstack
 from flag_gems.ops.hypot import hypot, hypot_out
+from flag_gems.ops.i0 import i0, i0_out
 from flag_gems.ops.index import index
 from flag_gems.ops.index_add import index_add, index_add_
 from flag_gems.ops.index_put import index_put, index_put_
@@ -125,6 +126,7 @@ from flag_gems.ops.kron import kron
 from flag_gems.ops.layernorm import layer_norm, layer_norm_backward
 from flag_gems.ops.le import le, le_scalar
 from flag_gems.ops.lerp import lerp_scalar, lerp_scalar_, lerp_tensor, lerp_tensor_
+from flag_gems.ops.lift_fresh_copy import lift_fresh_copy, lift_fresh_copy_out
 from flag_gems.ops.linspace import linspace
 from flag_gems.ops.log import log
 from flag_gems.ops.log_sigmoid import log_sigmoid
@@ -394,6 +396,8 @@ __all__ = [
     "hstack",
     "hypot",
     "hypot_out",
+    "i0",
+    "i0_out",
     "index",
     "index_add",
     "index_add_",
@@ -414,6 +418,8 @@ __all__ = [
     "lerp_scalar_",
     "lerp_tensor",
     "lerp_tensor_",
+    "lift_fresh_copy",
+    "lift_fresh_copy_out",
     "linspace",
     "log",
     "log_sigmoid",
