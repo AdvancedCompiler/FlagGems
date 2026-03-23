@@ -21,20 +21,15 @@ except ImportError:
     VLLM_AVAILABLE = False
 
 
-def get_sm_version_num():
+def is_cuda_available():
     if flag_gems.device != "cuda":
         return False
     major, minor = torch.cuda.get_device_capability()
     sm_version_num = major * 10 + minor
-    return sm_version_num
-
-
-def is_hopper_available():
-    sm_version_num = get_sm_version_num()
     return sm_version_num >= 90 and sm_version_num < 100
 
 
-HOPPER_AVAILABLE = is_hopper_available()
+CUDA_AVAILABLE = is_cuda_available()
 
 
 def to_int8(tensor: torch.Tensor):
@@ -182,7 +177,7 @@ class CutlassScaledMMTestKit:
 
 
 @pytest.mark.skipif(
-    not (VLLM_AVAILABLE and HOPPER_AVAILABLE),
+    not (VLLM_AVAILABLE and CUDA_AVAILABLE),
     reason="requires vLLM and NVIDIA Hopper architecture",
 )
 @pytest.mark.cutlass_scaled_mm
@@ -515,7 +510,7 @@ def torch_fused_moe_quantized_reference(
 @pytest.mark.fused_moe
 @pytest.mark.parametrize("config", FUSED_MOE_QUANT_CONFIGS)
 @pytest.mark.skipif(
-    not is_hopper_available(),
+    not is_cuda_available(),
     reason="FP8 quantization requires NVIDIA Hopper architecture",
 )
 def test_accuracy_fused_moe_fp8(config):

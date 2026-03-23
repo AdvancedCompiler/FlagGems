@@ -21,20 +21,15 @@ def is_vllm_available():
 VLLM_AVAILABLE = is_vllm_available()
 
 
-def get_sm_version_num():
+def is_cuda_available():
     if flag_gems.device != "cuda":
         return False
     major, minor = torch.cuda.get_device_capability()
     sm_version_num = major * 10 + minor
-    return sm_version_num
-
-
-def is_hopper_available():
-    sm_version_num = get_sm_version_num()
     return sm_version_num >= 90 and sm_version_num < 100
 
 
-HOPPER_AVAILABLE = is_hopper_available()
+CUDA_AVAILABLE = is_cuda_available()
 
 
 def to_int8(tensor: torch.Tensor):
@@ -234,7 +229,7 @@ class CutlassScaledMMBenchmark(Benchmark):
 
 
 @pytest.mark.skipif(
-    not (VLLM_AVAILABLE and HOPPER_AVAILABLE),
+    not (VLLM_AVAILABLE and CUDA_AVAILABLE),
     reason="requires vLLM and NVIDIA Hopper architecture",
 )
 @pytest.mark.cutlass_scaled_mm
@@ -494,7 +489,7 @@ def _gems_fused_moe_fp8_wrapper(
 
 @pytest.mark.fused_moe
 @pytest.mark.skipif(
-    not (HAS_VLLM_FUSED_MOE and HOPPER_AVAILABLE),
+    not (HAS_VLLM_FUSED_MOE and CUDA_AVAILABLE),
     reason="requires vLLM and NVIDIA Hopper architecture for FP8",
 )
 def test_perf_fused_moe_fp8_gems_vs_vllm():
@@ -811,7 +806,7 @@ def _gems_fused_moe_int8_w8a16_wrapper(
 
 
 @pytest.mark.fused_moe
-@pytest.mark.skipif(not HOPPER_AVAILABLE, reason="requires NVIDIA Hopper architecture")
+@pytest.mark.skipif(not CUDA_AVAILABLE, reason="requires NVIDIA Hopper architecture")
 def test_perf_fused_moe_int8_w8a16_gems_vs_vllm():
     """
     Benchmark FlagGems fused_experts_impl with INT8 W8A16 quantization.
@@ -973,7 +968,7 @@ def _gems_fused_moe_int4_w4a16_wrapper(
 
 
 @pytest.mark.fused_moe
-@pytest.mark.skipif(not HOPPER_AVAILABLE, reason="requires NVIDIA Hopper architecture")
+@pytest.mark.skipif(not CUDA_AVAILABLE, reason="requires NVIDIA Hopper architecture")
 def test_perf_fused_moe_int4_w4a16_gems_vs_vllm():
     """
     Benchmark FlagGems fused_experts_impl with INT4 W4A16 quantization.
@@ -1052,7 +1047,7 @@ class GetPagedMqaLogitsMetadataBenchmark(Benchmark):
 
 @pytest.mark.get_paged_mqa_logits_metadata
 @pytest.mark.skipif(
-    not (DEEPGEMM_AVAILABLE and get_sm_version_num() >= 90),
+    not DEEPGEMM_AVAILABLE,
     reason="requires vLLM with DeepGEMM and NVIDIA Hopper architecture or newer",
 )
 def test_get_paged_mqa_logits_metadata_benchmark():
