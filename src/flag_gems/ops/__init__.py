@@ -85,6 +85,7 @@ from flag_gems.ops.dot import dot
 from flag_gems.ops.dropout import dropout, dropout_backward
 from flag_gems.ops.elu import elu, elu_, elu_backward
 from flag_gems.ops.embedding import embedding, embedding_backward
+from flag_gems.ops.embedding_dense_backward import embedding_dense_backward
 from flag_gems.ops.eq import eq, eq_scalar, equal
 from flag_gems.ops.erf import erf, erf_
 from flag_gems.ops.exp import exp, exp_, exp_out
@@ -112,6 +113,7 @@ from flag_gems.ops.groupnorm import group_norm, group_norm_backward
 from flag_gems.ops.gt import gt, gt_scalar
 from flag_gems.ops.hstack import hstack
 from flag_gems.ops.hypot import hypot, hypot_out
+from flag_gems.ops.i0 import i0, i0_out
 from flag_gems.ops.index import index
 from flag_gems.ops.index_add import index_add, index_add_
 from flag_gems.ops.index_put import index_put, index_put_
@@ -125,6 +127,7 @@ from flag_gems.ops.kron import kron
 from flag_gems.ops.layernorm import layer_norm, layer_norm_backward
 from flag_gems.ops.le import le, le_scalar
 from flag_gems.ops.lerp import lerp_scalar, lerp_scalar_, lerp_tensor, lerp_tensor_
+from flag_gems.ops.lift_fresh_copy import lift_fresh_copy, lift_fresh_copy_out
 from flag_gems.ops.linspace import linspace
 from flag_gems.ops.log import log
 from flag_gems.ops.log_sigmoid import log_sigmoid
@@ -155,6 +158,7 @@ from flag_gems.ops.mv import mv
 from flag_gems.ops.nan_to_num import nan_to_num
 from flag_gems.ops.ne import ne, ne_scalar
 from flag_gems.ops.neg import neg, neg_
+from flag_gems.ops.nll_loss_nd import nll_loss_nd_backward, nll_loss_nd_forward
 from flag_gems.ops.nllloss import (
     nll_loss2d_backward,
     nll_loss2d_forward,
@@ -212,6 +216,7 @@ from flag_gems.ops.sgn_ import sgn_
 from flag_gems.ops.sigmoid import sigmoid, sigmoid_, sigmoid_backward
 from flag_gems.ops.silu import silu, silu_, silu_backward
 from flag_gems.ops.sin import sin, sin_
+from flag_gems.ops.sinh_ import sinh_
 from flag_gems.ops.slice_scatter import slice_scatter
 from flag_gems.ops.softmax import softmax, softmax_backward
 from flag_gems.ops.softplus import softplus
@@ -232,6 +237,7 @@ from flag_gems.ops.triu import triu, triu_
 from flag_gems.ops.unfold_backward import unfold_backward
 from flag_gems.ops.uniform import uniform_
 from flag_gems.ops.unique import _unique2
+from flag_gems.ops.upsample_bicubic2d import upsample_bicubic2d
 from flag_gems.ops.upsample_bicubic2d_aa import _upsample_bicubic2d_aa
 from flag_gems.ops.upsample_linear1d import upsample_linear1d
 from flag_gems.ops.upsample_nearest1d import upsample_nearest1d
@@ -347,6 +353,7 @@ __all__ = [
     "elu_backward",
     "embedding",
     "embedding_backward",
+    "embedding_dense_backward",
     "eq",
     "eq_scalar",
     "equal",
@@ -390,6 +397,8 @@ __all__ = [
     "hstack",
     "hypot",
     "hypot_out",
+    "i0",
+    "i0_out",
     "index",
     "index_add",
     "index_add_",
@@ -410,6 +419,8 @@ __all__ = [
     "lerp_scalar_",
     "lerp_tensor",
     "lerp_tensor_",
+    "lift_fresh_copy",
+    "lift_fresh_copy_out",
     "linspace",
     "log",
     "log_sigmoid",
@@ -455,6 +466,8 @@ __all__ = [
     "nll_loss_forward",
     "nll_loss2d_backward",
     "nll_loss2d_forward",
+    "nll_loss_nd_forward",
+    "nll_loss_nd_backward",
     "nonzero",
     "normal_float_tensor",
     "normal_tensor_float",
@@ -516,6 +529,7 @@ __all__ = [
     "silu_backward",
     "sin",
     "sin_",
+    "sinh_",
     "slice_scatter",
     "softmax",
     "softmax_backward",
@@ -552,6 +566,7 @@ __all__ = [
     "true_divide_out",
     "unfold_backward",
     "uniform_",
+    "upsample_bicubic2d",
     "upsample_linear1d",
     "upsample_nearest1d",
     "upsample_nearest2d",
