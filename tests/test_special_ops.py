@@ -552,7 +552,6 @@ def test_embedding_backward(
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
-@pytest.mark.skipif(TO_CPU, reason="Unsupported in CPU mode")
 @pytest.mark.embedding_dense_backward
 @pytest.mark.parametrize(
     "Batch, M, N, embeddingsize",
@@ -582,6 +581,8 @@ def test_embedding_dense_backward(
     num_weights = embeddingsize
     ref_grad_output = to_reference(grad_output)
     ref_indices = to_reference(indices)
+    if TO_CPU and dtype in (torch.float16, torch.bfloat16):
+        ref_grad_output = ref_grad_output.to(torch.float32)
     ref_out = torch.ops.aten.embedding_dense_backward(
         ref_grad_output,
         ref_indices,
@@ -589,13 +590,12 @@ def test_embedding_dense_backward(
         padding_idx,
         scale_grad_by_freq,
     )
+    if TO_CPU and dtype in (torch.float16, torch.bfloat16):
+        ref_out = ref_out.to(dtype)
     with flag_gems.use_gems():
         res_out = torch.ops.aten.embedding_dense_backward(
             grad_output, indices, num_weights, padding_idx, scale_grad_by_freq
         )
-    # res_out = torch.ops.aten.embedding_dense_backward(
-    # grad_output, indices, num_weights, padding_idx, scale_grad_by_freq)
-
     gems_assert_close(res_out, ref_out, dtype)
 
 
