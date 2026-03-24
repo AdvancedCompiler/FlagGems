@@ -1706,7 +1706,7 @@ def test_accuracy_atan_(shape, dtype):
     gems_assert_close(res_out, ref_out, dtype)
 
 
-DREGU_SHAPES = [
+DREGLU_SHAPES = [
     (),
     (1,),
     (512, 512),
@@ -1723,7 +1723,7 @@ DREGU_SHAPES = [
 
 
 @pytest.mark.reglu
-@pytest.mark.parametrize("shape", DREGU_SHAPES)
+@pytest.mark.parametrize("shape", DREGLU_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 @pytest.mark.skipif(not TE_AVAILABLE, reason="transformer engine is not available")
 def test_accuracy_dreglu(shape, dtype):
