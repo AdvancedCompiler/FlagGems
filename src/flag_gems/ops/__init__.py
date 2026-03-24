@@ -104,6 +104,7 @@ from flag_gems.ops.fill import (
     fill_tensor_out,
 )
 from flag_gems.ops.flip import flip
+from flag_gems.ops.fp8_paged_mqa_logits import fp8_paged_mqa_logits
 from flag_gems.ops.full import full
 from flag_gems.ops.full_like import full_like
 from flag_gems.ops.gather import gather, gather_backward
@@ -389,6 +390,7 @@ __all__ = [
     "flip",
     "floor_divide",
     "floor_divide_",
+    "fp8_paged_mqa_logits",
     "full",
     "full_like",
     "gather",

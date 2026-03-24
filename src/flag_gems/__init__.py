@@ -178,6 +178,7 @@ _FULL_CONFIG = (
     ("floor_divide.Scalar", floor_divide),
     ("floor_divide_.Scalar", floor_divide_),
     ("floor_divide_.Tensor", floor_divide_),
+    ("fp8_paged_mqa_logits", fp8_paged_mqa_logits),
     ("full", full),
     ("full_like", full_like),
     ("gather", gather),
