@@ -1,7 +1,9 @@
 import random
+from typing import Generator
 
 import pytest
 import torch
+import triton
 
 import flag_gems
 from benchmark.attri_util import (
@@ -1079,6 +1081,54 @@ def test_perf_conj_physical():
     bench.run()
 
 
+@pytest.mark.reflection_pad2d
+@pytest.mark.parametrize(
+    "shape",
+    [
+        (3, 33, 33),
+        (2, 4, 32, 64),
+        (8, 16, 64, 64),
+        (32, 64, 128, 256),
+        (16, 32, 64, 128),
+    ],
+)
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.bfloat16])
+@pytest.mark.parametrize(
+    "padding",
+    [
+        (1, 1, 1, 1),
+        (2, 3, 2, 3),
+        (3, 5, 3, 5),
+        (0, 4, 0, 4),
+    ],
+)
+def test_reflection_pad2d_benchmark_tensor(shape, dtype, padding):
+    quantiles = [0.5, 0.2, 0.8]
+
+    x = torch.randn(shape, dtype=dtype, device=flag_gems.device)
+    ref_x = x.clone()
+
+    # PyTorch reference implementation
+    ms_torch, _, _ = triton.testing.do_bench(
+        lambda: torch.ops.aten.reflection_pad2d(ref_x, padding),
+        rep=100,
+        quantiles=quantiles,
+    )
+
+    # Triton implementation
+    with flag_gems.use_gems():
+        ms_triton, _, _ = triton.testing.do_bench(
+            lambda: flag_gems.reflection_pad2d(x, padding), rep=100, quantiles=quantiles
+        )
+
+    # Calculate speedup and return result
+    speedup = ms_torch / ms_triton
+
+    print(f"reflection_pad2d {shape} {dtype}:")
+    print(f"  FlagGems: {ms_triton:.3f}ms")
+    print(f"  Speedup: {speedup:.2f}x")
+
+
 @pytest.mark.upsample_bicubic2d
 @pytest.mark.parametrize("align_corners", [False, True])
 def test_perf_upsample_bicubic2d(align_corners):
@@ -1097,6 +1147,37 @@ def test_perf_upsample_bicubic2d(align_corners):
         input_fn=upsample_bicubic2d_input_fn,
         op_name=f"upsample_bicubic2d_align_{align_corners}",
         torch_op=torch._C._nn.upsample_bicubic2d,
+        dtypes=FLOAT_DTYPES,
+    )
+    bench.run()
+
+
+@pytest.mark.replication_pad1d
+def test_perf_replication_pad1d():
+    def replication_pad1d_input_fn(config, dtype, device):
+        shape, padding = config
+        x = torch.randn(shape, dtype=dtype, device=device)
+        yield x, list(padding)
+
+    class ReplicationPad1dBenchmark(Benchmark):
+        def set_shapes(self, shape_file_path=None):
+            self.shapes = [
+                ((2, 3, 7), (1, 2)),
+                ((4, 16, 64), (3, 1)),
+                ((8, 32, 256), (1, 2)),
+                ((32, 256), (3, 1)),
+            ]
+
+        def set_more_shapes(self):
+            return None
+
+        def get_input_iter(self, cur_dtype):
+            for config in self.shapes:
+                yield from replication_pad1d_input_fn(config, cur_dtype, self.device)
+
+    bench = ReplicationPad1dBenchmark(
+        op_name="replication_pad1d",
+        torch_op=torch.ops.aten.replication_pad1d,
         dtypes=FLOAT_DTYPES,
     )
     bench.run()
@@ -1150,6 +1231,24 @@ def test_perf_lift_fresh_copy():
         ),
         op_name="lift_fresh_copy",
         torch_op=torch.ops.aten.lift_fresh_copy,
+        dtypes=FLOAT_DTYPES,
+    )
+    bench.run()
+
+
+class TCopyBenchmark(Benchmark):
+    def get_input_iter(self, cur_dtype) -> Generator:
+        for shape in self.shapes:
+            if len(shape) == 2:
+                inp = generate_tensor_input(shape, cur_dtype, self.device)
+                yield inp,
+
+
+@pytest.mark.t_copy
+def test_perf_t_copy():
+    bench = TCopyBenchmark(
+        op_name="t_copy",
+        torch_op=torch.ops.aten.t_copy,
         dtypes=FLOAT_DTYPES,
     )
     bench.run()
