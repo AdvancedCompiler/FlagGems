@@ -199,7 +199,7 @@ def attention_ref(
 
 def torch_sdpa(q, k, v, scale, is_causal, enable_gqa=False):
     if torch.__version__ < "2.5":
-        torch_result = torch.nn.functional.scaled_dot_product_attention(
+        return torch.nn.functional.scaled_dot_product_attention(
             q,
             k,
             v,
@@ -207,25 +207,25 @@ def torch_sdpa(q, k, v, scale, is_causal, enable_gqa=False):
             scale=scale,
             is_causal=is_causal,
         )
+
+    if flag_gems.vendor_name == "iluvatar" and TO_CPU:
+        from torch.nn.attention import SDPBackend, sdpa_kernel
+
+        ctx = sdpa_kernel(backends=[SDPBackend.MATH])
     else:
-        if flag_gems.vendor_name == "iluvatar" and TO_CPU:
-            from torch.nn.attention import SDPBackend, sdpa_kernel
+        from contextlib import nullcontext
 
-            ctx = sdpa_kernel(backends=[SDPBackend.MATH])
-        else:
-            from contextlib import nullcontext
-
-            ctx = nullcontext()
-        with ctx:
-            torch_result = torch.nn.functional.scaled_dot_product_attention(
-                q,
-                k,
-                v,
-                attn_mask=None,
-                scale=scale,
-                is_causal=is_causal,
-                enable_gqa=enable_gqa,
-            )
+        ctx = nullcontext()
+    with ctx:
+        torch_result = torch.nn.functional.scaled_dot_product_attention(
+            q,
+            k,
+            v,
+            attn_mask=None,
+            scale=scale,
+            is_causal=is_causal,
+            enable_gqa=enable_gqa,
+        )
     return torch_result
 
 
@@ -290,8 +290,7 @@ def gems_flash_fwd(
     return out, lse, seed, offset, debug_softmax
 
 
-@pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RuntimeError")
-@pytest.mark.skipif(flag_gems.vendor_name == "kunlunxin", reason="RESULT TODOFIX")
+# @pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RuntimeError")
 @pytest.mark.skipif(
     torch.__version__ < "2.5", reason="Low Pytorch Version: enable_gqa not supported"
 )
@@ -340,6 +339,8 @@ def test_sdpa_legacy(
     dtype,
     enable_gqa,
 ):
+    if flag_gems.vendor_name == "hygon":
+        os.environ["TRITON_HIP_USE_NEW_STREAM_PIPELINE"] = "0"
     device = torch_device_fn.current_device()
     q, k, v = make_input(
         batch,
@@ -362,11 +363,30 @@ def test_sdpa_legacy(
         ref_q, ref_k, ref_v, scale, is_causal, enable_gqa=enable_gqa
     )
 
-    gems_result = flag_gems.ops.scaled_dot_product_attention(
-        q, k, v, attn_mask=None, scale=scale, is_causal=is_causal, enable_gqa=enable_gqa
-    )
+    if flag_gems.vendor_name == "cambricon":
+        gems_result = flag_gems.scaled_dot_product_attention(
+            q,
+            k,
+            v,
+            attn_mask=None,
+            scale=scale,
+            is_causal=is_causal,
+            enable_gqa=enable_gqa,
+        )
+    else:
+        gems_result = flag_gems.ops.scaled_dot_product_attention(
+            q,
+            k,
+            v,
+            attn_mask=None,
+            scale=scale,
+            is_causal=is_causal,
+            enable_gqa=enable_gqa,
+        )
 
     gems_assert_close(gems_result, torch_result, dtype)
+    if flag_gems.vendor_name == "hygon":
+        del os.environ["TRITON_HIP_USE_NEW_STREAM_PIPELINE"]
 
 
 @pytest.mark.skipif(True, reason="something wrong here, disable it for temp")
@@ -443,9 +463,26 @@ def test_sdpa_legacy_backward(
         ref_q, ref_k, ref_v, scale, is_causal, enable_gqa=enable_gqa
     )
 
-    gems_result = flag_gems.ops.scaled_dot_product_attention(
-        q, k, v, attn_mask=None, scale=scale, is_causal=is_causal, enable_gqa=enable_gqa
-    )
+    if flag_gems.vendor_name == "cambricon":
+        gems_result = flag_gems.scaled_dot_product_attention(
+            q,
+            k,
+            v,
+            attn_mask=None,
+            scale=scale,
+            is_causal=is_causal,
+            enable_gqa=enable_gqa,
+        )
+    else:
+        gems_result = flag_gems.ops.scaled_dot_product_attention(
+            q,
+            k,
+            v,
+            attn_mask=None,
+            scale=scale,
+            is_causal=is_causal,
+            enable_gqa=enable_gqa,
+        )
 
     gems_assert_close(gems_result, torch_result, dtype)
 
@@ -466,8 +503,7 @@ def test_sdpa_legacy_backward(
     gems_assert_close(gems_v_grad, torch_v_grad, dtype, equal_nan=True)
 
 
-@pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RuntimeError")
-@pytest.mark.skipif(flag_gems.vendor_name == "kunlunxin", reason="RESULT TODOFIX")
+# @pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RuntimeError")
 @pytest.mark.scaled_dot_product_attention
 @pytest.mark.parametrize(
     ["batch", "num_head", "q_seq_len", "kv_seq_len"],
@@ -501,8 +537,7 @@ def test_sdpa_square_qk_even_mn(
         del os.environ["MUSA_ENABLE_SQMMA"]
 
 
-@pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RuntimeError")
-@pytest.mark.skipif(flag_gems.vendor_name == "kunlunxin", reason="RESULT TODOFIX")
+# @pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RuntimeError")
 @pytest.mark.scaled_dot_product_attention
 @pytest.mark.parametrize(
     ["batch", "num_head", "q_seq_len", "kv_seq_len"],
@@ -516,6 +551,8 @@ def test_sdpa_nonsquare_qk(
 ):
     if flag_gems.vendor_name == "mthreads":
         os.environ["MUSA_ENABLE_SQMMA"] = "1"
+    if flag_gems.vendor_name == "hygon":
+        os.environ["TRITON_HIP_USE_NEW_STREAM_PIPELINE"] = "0"
 
     device = torch_device_fn.current_device()
     q, k, v = make_input(
@@ -532,6 +569,8 @@ def test_sdpa_nonsquare_qk(
 
     if flag_gems.vendor_name == "mthreads":
         del os.environ["MUSA_ENABLE_SQMMA"]
+    if flag_gems.vendor_name == "hygon":
+        del os.environ["TRITON_HIP_USE_NEW_STREAM_PIPELINE"]
 
 
 @pytest.mark.skipif(flag_gems.vendor_name == "metax", reason="TODOFIX")
@@ -540,7 +579,6 @@ def test_sdpa_nonsquare_qk(
 @pytest.mark.skipif(
     flag_gems.vendor_name == "mthreads", reason="Unsupported in CPU mode"
 )
-@pytest.mark.skipif(flag_gems.vendor_name == "kunlunxin", reason="RESULT TODOFIX")
 @pytest.mark.flash_attention_forward
 @pytest.mark.parametrize(
     ["batch", "num_head", "q_seq_len", "kv_seq_len"],
@@ -851,7 +889,7 @@ def ref_paged_attn(
             v = torch.repeat_interleave(v, q.shape[1] // v.shape[1], dim=1)
 
         attn = torch.einsum("qhd,khd->hqk", q, k)
-        empty_mask = torch.ones(query_len, kv_len)
+        empty_mask = torch.ones(query_len, kv_len, device=q.device)
         mask = torch.triu(empty_mask, diagonal=kv_len - query_len + 1).bool()
         if sliding_window is not None:
             sliding_window_mask = (
@@ -911,6 +949,9 @@ def test_flash_attn_varlen_func(
 
     with torch.device(flag_gems.device):
         init_seed(1234567890)
+        if flag_gems.vendor_name == "cambricon":
+            torch.manual_seed(123456)
+            torch.mlu.manual_seed_all(123456)
         num_seqs = len(seq_lens)
         query_lens = [x[0] for x in seq_lens]
         kv_lens = [x[1] for x in seq_lens]
@@ -928,14 +969,18 @@ def test_flash_attn_varlen_func(
             num_blocks, block_size, num_kv_heads, head_size, dtype=dtype
         )
         value_cache = torch.randn_like(key_cache)
-        cu_query_lens = torch.tensor([0] + query_lens, dtype=torch.int32).cumsum(
-            dim=0, dtype=torch.int32
-        )
-        seqused_k = torch.tensor(kv_lens, dtype=torch.int32)
+        cu_query_lens = torch.tensor(
+            [0] + query_lens, dtype=torch.int32, device=device
+        ).cumsum(dim=0, dtype=torch.int32)
+        seqused_k = torch.tensor(kv_lens, dtype=torch.int32, device=device)
 
         max_num_blocks_per_seq = (max_kv_len + block_size - 1) // block_size
         block_tables = torch.randint(
-            0, num_blocks, (num_seqs, max_num_blocks_per_seq), dtype=torch.int32
+            0,
+            num_blocks,
+            (num_seqs, max_num_blocks_per_seq),
+            dtype=torch.int32,
+            device=device,
         )
 
         causal = True
@@ -954,22 +999,40 @@ def test_flash_attn_varlen_func(
         else:
             alibi_slopes, attn_bias = None, None
 
-        output = flag_gems.ops.flash_attn_varlen_func(
-            q=query,
-            k=key_cache,
-            v=value_cache,
-            cu_seqlens_q=cu_query_lens,
-            seqused_k=seqused_k,
-            max_seqlen_q=max_query_len,
-            max_seqlen_k=max_kv_len,
-            softmax_scale=scale,
-            causal=causal,
-            window_size=window_size,
-            block_table=block_tables,
-            softcap=soft_cap if soft_cap is not None else 0,
-            alibi_slopes=alibi_slopes,
-            fa_version=2,
-        )
+        if flag_gems.vendor_name == "cambricon":
+            output = flag_gems.flash_attn_varlen_func(
+                q=query,
+                k=key_cache,
+                v=value_cache,
+                cu_seqlens_q=cu_query_lens,
+                seqused_k=seqused_k,
+                max_seqlen_q=max_query_len,
+                max_seqlen_k=max_kv_len,
+                softmax_scale=scale,
+                causal=causal,
+                window_size=window_size,
+                block_table=block_tables,
+                softcap=soft_cap if soft_cap is not None else 0,
+                alibi_slopes=alibi_slopes,
+                fa_version=2,
+            )
+        else:
+            output = flag_gems.ops.flash_attn_varlen_func(
+                q=query,
+                k=key_cache,
+                v=value_cache,
+                cu_seqlens_q=cu_query_lens,
+                seqused_k=seqused_k,
+                max_seqlen_q=max_query_len,
+                max_seqlen_k=max_kv_len,
+                softmax_scale=scale,
+                causal=causal,
+                window_size=window_size,
+                block_table=block_tables,
+                softcap=soft_cap if soft_cap is not None else 0,
+                alibi_slopes=alibi_slopes,
+                fa_version=2,
+            )
 
         ref_output = ref_paged_attn(
             query=query,
@@ -1036,31 +1099,52 @@ def test_flash_attn_varlen_func_swap_qg(
             num_blocks, block_size, num_kv_heads, head_size, dtype=dtype
         )
         value_cache = torch.randn_like(key_cache)
-        cu_query_lens = torch.tensor([0] + query_lens, dtype=torch.int32).cumsum(
-            dim=0, dtype=torch.int32
-        )
-        seqused_k = torch.tensor(kv_lens, dtype=torch.int32)
+        cu_query_lens = torch.tensor(
+            [0] + query_lens, dtype=torch.int32, device=device
+        ).cumsum(dim=0, dtype=torch.int32)
+        seqused_k = torch.tensor(kv_lens, dtype=torch.int32, device=device)
 
         max_num_blocks_per_seq = (max_kv_len + block_size - 1) // block_size
         block_tables = torch.randint(
-            0, num_blocks, (num_seqs, max_num_blocks_per_seq), dtype=torch.int32
+            0,
+            num_blocks,
+            (num_seqs, max_num_blocks_per_seq),
+            dtype=torch.int32,
+            device=device,
         )
 
-        output = flag_gems.ops.flash_attn_varlen_func(
-            q=query,
-            k=key_cache,
-            v=value_cache,
-            cu_seqlens_q=cu_query_lens,
-            seqused_k=seqused_k,
-            max_seqlen_q=max_query_len,
-            max_seqlen_k=max_kv_len,
-            softmax_scale=scale,
-            causal=True,
-            window_size=window_size,
-            block_table=block_tables,
-            softcap=soft_cap if soft_cap is not None else 0,
-            fa_version=2,
-        )
+        if flag_gems.vendor_name == "cambricon":
+            output = flag_gems.flash_attn_varlen_func(
+                q=query,
+                k=key_cache,
+                v=value_cache,
+                cu_seqlens_q=cu_query_lens,
+                seqused_k=seqused_k,
+                max_seqlen_q=max_query_len,
+                max_seqlen_k=max_kv_len,
+                softmax_scale=scale,
+                causal=True,
+                window_size=window_size,
+                block_table=block_tables,
+                softcap=soft_cap if soft_cap is not None else 0,
+                fa_version=2,
+            )
+        else:
+            output = flag_gems.ops.flash_attn_varlen_func(
+                q=query,
+                k=key_cache,
+                v=value_cache,
+                cu_seqlens_q=cu_query_lens,
+                seqused_k=seqused_k,
+                max_seqlen_q=max_query_len,
+                max_seqlen_k=max_kv_len,
+                softmax_scale=scale,
+                causal=True,
+                window_size=window_size,
+                block_table=block_tables,
+                softcap=soft_cap if soft_cap is not None else 0,
+                fa_version=2,
+            )
 
         ref_output = ref_paged_attn(
             query=query,
@@ -1272,7 +1356,7 @@ def test_reshape_and_cache(
         # Create a random slot mapping.
         num_slots = block_size * num_blocks
         slot_mapping_lst = random.sample(range(num_slots), num_tokens)
-        slot_mapping = torch.tensor(slot_mapping_lst, dtype=torch.long)
+        slot_mapping = torch.tensor(slot_mapping_lst, dtype=torch.long, device=device)
 
         qkv = torch.randn(num_tokens, 3, num_heads, head_size, dtype=dtype)
         _, key, value = qkv.unbind(dim=1)
@@ -1468,8 +1552,6 @@ def test_reshape_and_cache_flash(
 
 
 @pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RuntimeError")
-@pytest.mark.skipif(flag_gems.vendor_name == "kunlunxin", reason="RESULT TODOFIX")
-@pytest.mark.skipif(flag_gems.vendor_name == "cambricon", reason="TypeError")
 @pytest.mark.flash_mla
 @pytest.mark.parametrize("seqlen", [1024, 2048, 4096, 8192])
 @pytest.mark.parametrize(

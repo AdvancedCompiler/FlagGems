@@ -4,10 +4,11 @@ import torch
 import triton
 import triton.language as tl
 
+from flag_gems.runtime import torch_device_fn
 from flag_gems.utils import libentry
 from flag_gems.utils.limits import get_dtype_min
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("flag_gems").getChild(__name__.lstrip("."))
 
 
 def max_pool2d_output_size(
@@ -34,17 +35,6 @@ def max_pool2d_output_size(
 @libentry()
 @triton.autotune(
     configs=[
-        triton.Config({"BLOCK_H": 16, "BLOCK_W": 16}, num_stages=4, num_warps=4),
-        triton.Config({"BLOCK_H": 32, "BLOCK_W": 16}, num_stages=3, num_warps=4),
-        triton.Config({"BLOCK_H": 16, "BLOCK_W": 32}, num_stages=3, num_warps=4),
-        triton.Config({"BLOCK_H": 32, "BLOCK_W": 32}, num_stages=2, num_warps=8),
-        triton.Config({"BLOCK_H": 8, "BLOCK_W": 8}, num_stages=5, num_warps=2),
-        triton.Config({"BLOCK_H": 16, "BLOCK_W": 8}, num_stages=5, num_warps=2),
-        triton.Config({"BLOCK_H": 8, "BLOCK_W": 16}, num_stages=5, num_warps=2),
-        triton.Config({"BLOCK_H": 64, "BLOCK_W": 16}, num_stages=2, num_warps=8),
-        triton.Config({"BLOCK_H": 16, "BLOCK_W": 64}, num_stages=2, num_warps=8),
-        triton.Config({"BLOCK_H": 32, "BLOCK_W": 64}, num_stages=3, num_warps=8),
-        triton.Config({"BLOCK_H": 64, "BLOCK_W": 32}, num_stages=3, num_warps=8),
         triton.Config({"BLOCK_H": 64, "BLOCK_W": 64}, num_stages=2, num_warps=8),
     ],
     key=["out_h", "out_w", "kernel_h", "kernel_w", "stride_h", "stride_w"],
@@ -92,7 +82,7 @@ def max_pool2d_forward_kernel(
     dtype = input_ptr.type.element_ty
     min_val = get_dtype_min(dtype)
     max_val_acc = tl.full((BLOCK_H, BLOCK_W), min_val, dtype=dtype)
-    max_idx_acc = tl.full((BLOCK_H, BLOCK_W), -1, dtype=tl.int64)
+    max_idx_acc = tl.full((BLOCK_H, BLOCK_W), -1, dtype=tl.int32)
 
     input_base_ptr = input_ptr + n_idx * in_stride_n + c_idx * in_stride_c
 
@@ -130,11 +120,6 @@ def max_pool2d_forward_kernel(
 @libentry()
 @triton.autotune(
     configs=[
-        triton.Config({"BLOCK_IN_H": 16, "BLOCK_IN_W": 16}, num_warps=4),
-        triton.Config({"BLOCK_IN_H": 32, "BLOCK_IN_W": 8}, num_warps=4),
-        triton.Config({"BLOCK_IN_H": 8, "BLOCK_IN_W": 32}, num_warps=4),
-        triton.Config({"BLOCK_IN_H": 32, "BLOCK_IN_W": 32}, num_warps=8),
-        triton.Config({"BLOCK_IN_H": 16, "BLOCK_IN_W": 64}, num_warps=8),
         triton.Config({"BLOCK_IN_H": 64, "BLOCK_IN_W": 16}, num_warps=8),
     ],
     key=["in_h", "in_w", "kernel_h", "kernel_w", "stride_h", "stride_w"],
@@ -145,6 +130,7 @@ def max_pool2d_backward_kernel(
     indices_ptr,
     grad_input_ptr,
     # Shape info
+    in_c,
     in_h,
     in_w,
     out_h,
@@ -292,7 +278,7 @@ def max_pool2d_with_indices(
         (in_n, in_c, out_h, out_w), device=input.device, dtype=input.dtype
     )
     indices = torch.empty(
-        (in_n, in_c, out_h, out_w), device=input.device, dtype=torch.int64
+        (in_n, in_c, out_h, out_w), device=input.device, dtype=torch.int32
     )
 
     if output.numel() == 0:
@@ -303,28 +289,29 @@ def max_pool2d_with_indices(
         triton.cdiv(out_h, meta["BLOCK_H"]) * triton.cdiv(out_w, meta["BLOCK_W"]),
     )
 
-    max_pool2d_forward_kernel[grid](
-        input,
-        output,
-        indices,
-        input.stride(0),
-        input.stride(1),
-        input.stride(2),
-        input.stride(3),
-        in_c,
-        in_h,
-        in_w,
-        out_h,
-        out_w,
-        kernel_h,
-        kernel_w,
-        stride_h,
-        stride_w,
-        padding_h,
-        padding_w,
-        dilation_h,
-        dilation_w,
-    )
+    with torch_device_fn.device(input.device):
+        max_pool2d_forward_kernel[grid](
+            input,
+            output,
+            indices,
+            input.stride(0),
+            input.stride(1),
+            input.stride(2),
+            input.stride(3),
+            in_c,
+            in_h,
+            in_w,
+            out_h,
+            out_w,
+            kernel_h,
+            kernel_w,
+            stride_h,
+            stride_w,
+            padding_h,
+            padding_w,
+            dilation_h,
+            dilation_w,
+        )
 
     return output, indices
 
@@ -340,8 +327,9 @@ def max_pool2d_backward(
     ceil_mode,
 ):
     logger.debug("GEMS MAX_POOL2D BACKWARD")
-    grad_output = grad_output.contiguous()
-    indices = indices.contiguous()
+    original_dtype = grad_output.dtype
+    grad_output = grad_output.to(torch.float32).contiguous()
+    indices = indices.to(torch.int32).contiguous()
 
     params = _parse_pool_params(kernel_size, stride, padding, dilation)
     (
@@ -361,7 +349,7 @@ def max_pool2d_backward(
     grad_input = torch.zeros_like(input, dtype=torch.float32)
 
     if grad_input.numel() == 0:
-        return grad_input.to(grad_output.dtype)
+        return grad_input.to(original_dtype)
 
     grid = lambda meta: (
         in_n * in_c,
@@ -372,25 +360,27 @@ def max_pool2d_backward(
     out_stride_h = out_w
     out_stride_w = 1
 
-    max_pool2d_backward_kernel[grid](
-        grad_output,
-        indices,
-        grad_input,
-        in_h,
-        in_w,
-        out_h,
-        out_w,
-        out_stride_nc,
-        out_stride_h,
-        out_stride_w,
-        kernel_h,
-        kernel_w,
-        stride_h,
-        stride_w,
-        padding_h,
-        padding_w,
-        dilation_h,
-        dilation_w,
-    )
+    with torch_device_fn.device(grad_input.device):
+        max_pool2d_backward_kernel[grid](
+            grad_output,
+            indices,
+            grad_input,
+            in_c,
+            in_h,
+            in_w,
+            out_h,
+            out_w,
+            out_stride_nc,
+            out_stride_h,
+            out_stride_w,
+            kernel_h,
+            kernel_w,
+            stride_h,
+            stride_w,
+            padding_h,
+            padding_w,
+            dilation_h,
+            dilation_w,
+        )
 
-    return grad_input.to(grad_output.dtype)
+    return grad_input.to(original_dtype)

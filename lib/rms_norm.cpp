@@ -1,31 +1,49 @@
+#include <iostream>
+#include "flag_gems/backend_utils.h"
 #include "flag_gems/operators.h"
 #include "flag_gems/utils.h"
-
-#include <iostream>
-#include "c10/cuda/CUDAStream.h"
 #include "triton_jit/triton_jit_function.h"
 
 namespace flag_gems {
 using namespace triton_jit;
 
-// TODO(flaggems): Only supports 2D inputs and 1D weight (last-dim norm).
-// Extend to support higher-rank inputs and generalized weight shapes
-// like torch.nn.functional.rms_norm.
+namespace {
 
-at::Tensor rms_norm(const at::Tensor& input,   // [..., hidden_size]
-                    const at::Tensor& weight,  // [hidden_size]
-                    double epsilon) {          //  default 1e-5
+  int get_rms_norm_num_warps(int64_t block_size) {
+#if defined(FLAGGEMS_USE_IX)
+    // Python launches this kernel without forcing num_warps. The previous C++
+    // wrapper hard-coded 8 warps, which is too aggressive for small IX RMSNorm
+    // tiles and leads to obviously incorrect results. Use a conservative
+    // heuristic that matches the default Python behavior more closely.
+    if (block_size < 2048) {
+      return 4;
+    }
+    if (block_size < 4096) {
+      return 8;
+    }
+    return 16;
+#else
+    return 8;
+#endif
+  }
 
-  int64_t hidden_size = input.size(-1);
-  int64_t M = input.numel() / hidden_size;
-  int64_t N = weight.size(0);  // assumes 1D weight
+}  // namespace
+
+at::Tensor rms_norm(const at::Tensor& input, const at::Tensor& weight, double epsilon) {
+  at::Tensor contig_input = input.contiguous();
+  at::Tensor contig_weight = weight.contiguous();
+  const float epsilon_val = static_cast<float>(epsilon);
+  at::IntArrayRef normalized_shape = contig_weight.sizes();
+  int64_t dim = contig_input.ndimension() - normalized_shape.size();
+  int64_t M = 1;
+  for (int i = 0; i < dim; ++i) {
+    M *= contig_input.size(i);
+  }
+  int64_t N = contig_input.numel() / M;
   int64_t BLOCK_SIZE = utils::next_power_of_2(N);
 
   at::Tensor out = at::empty(input.sizes(), input.options());
   at::Tensor inv_rms = at::empty({M}, at::TensorOptions().dtype(torch::kFloat32).device(input.device()));
-
-  auto input_strides = input.strides();
-  auto output_strides = out.strides();
 
   const TritonJITFunction& f =
       TritonJITFunction::get_instance(std::string(utils::get_flag_gems_src_path() / "ops" / "rms_norm.py"),
@@ -33,8 +51,8 @@ at::Tensor rms_norm(const at::Tensor& input,   // [..., hidden_size]
 
   // getCurrentCUDAStream ensures that the stream is initialized, a default stream for each device
   c10::DeviceGuard guard(out.device());
-  c10::cuda::CUDAStream stream = c10::cuda::getCurrentCUDAStream();
-  CUstream raw_stream = static_cast<CUstream>(stream.stream());
+  backend::StreamType stream = backend::getCurrentStream();
+  backend::RawStreamType raw_stream = backend::getRawStream(stream);
 
   /* siguature info
   def rms_norm_kernel(
@@ -54,18 +72,18 @@ at::Tensor rms_norm(const at::Tensor& input,   // [..., hidden_size]
     M,
     1,
     1,
-    /* num_warps */ 8,
+    /* num_warps */ get_rms_norm_num_warps(BLOCK_SIZE),
     /* num_stages */ 1,
     out,
     inv_rms,
-    input,
-    weight,
-    output_strides[0],
-    output_strides[1],
-    input_strides[0],
-    input_strides[1],
+    contig_input,
+    contig_weight,
     N,
-    epsilon,
+    1,
+    N,
+    1,
+    N,
+    epsilon_val,
     BLOCK_SIZE);
 
   return out;

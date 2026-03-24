@@ -128,11 +128,14 @@ def batchnorm_input_fn(shape, dtype, device):
     ],
 )
 def test_group_and_layer_and_instance_norm_benchmark(op_name, torch_op, input_fn):
-    if vendor_name == "kunlunxin" and op_name in [
-        "instance_norm",
-        "batch_norm",
-    ]:
-        pytest.skip("RUNTIME TODOFIX.(batch_norm unsupported in torch)")
+    if (
+        vendor_name == "kunlunxin"
+        and op_name == "instance_norm"
+        and SkipVersion("torch", "<2.5")
+    ):
+        pytest.skip(
+            "BF16 is not supported in XPytorch 2.0. Please upgrade your PyTorch version >= 2.5"
+        )
     if vendor_name == "mthreads" and op_name == "instance_norm":
         # Compatible with older versions of LLVM
         os.environ["DISABLE_LLVM_OPT"] = "1"
@@ -146,7 +149,7 @@ def test_group_and_layer_and_instance_norm_benchmark(op_name, torch_op, input_fn
         del os.environ["DISABLE_LLVM_OPT"]
 
 
-@pytest.mark.batch_norm_backward
+@pytest.mark.batch_norm
 def test_perf_batch_norm_backward():
     def batch_norm_backward_input_fn(shape, dtype, device):
         for forward_args in batchnorm_input_fn(shape, dtype, device):
@@ -191,7 +194,7 @@ def test_perf_batch_norm_backward():
         input_fn=batch_norm_backward_input_fn,
         op_name="native_batch_norm_backward",
         torch_op=torch.ops.aten.native_batch_norm_backward,
-        dtypes=FLOAT_DTYPES,
+        dtypes=[torch.float32] if vendor_name == "mthreads" else FLOAT_DTYPES,
     )
     bench.set_gems(flag_gems.batch_norm_backward)
     bench.run()
@@ -206,8 +209,8 @@ def weight_norm_interface_input_fn(shape, dtype, device):
 
 def weight_norm_input_fn(shape, dtype, device):
     v = torch.randn(shape, dtype=dtype, device=device)
-    if vendor_name == "cambricon":
-        # Cambricon fix input shape limit.
+    if vendor_name == "cambricon" or vendor_name == "enflame":
+        # Cambricon and Enflame fix input shape limit.
         g = torch.randn(shape[:1] + (1,) * (len(shape) - 1), dtype=dtype, device=device)
     else:
         g = torch.randn(shape, dtype=dtype, device=device)

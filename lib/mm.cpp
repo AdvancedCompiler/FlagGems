@@ -1,62 +1,14 @@
+#include "flag_gems/backend_utils.h"
+#include "flag_gems/device_info.h"
 #include "flag_gems/operators.h"
 #include "flag_gems/utils.h"
 
-#include <ATen/cuda/CUDAContext.h>  // for getCurrentDevice, getDeviceProperties
-#include <cuda_runtime.h>           // for cudaDeviceProp
 #include <iostream>
 #include <tuple>
-#include "c10/cuda/CUDAStream.h"
 #include "triton_jit/triton_jit_function.h"
 
 namespace flag_gems {
 using namespace triton_jit;
-
-struct DeviceInfo {
-  int device_id;
-  size_t l2_cache_size;
-  int sm_count;
-  int major;
-};
-
-inline const DeviceInfo &get_device_info() {
-  static const DeviceInfo info = []() {
-    DeviceInfo dev_info {};
-    if (cudaGetDevice(&dev_info.device_id) != cudaSuccess) {
-      dev_info.device_id = 0;  // fallback
-    }
-
-    cudaDeviceProp props {};
-    if (cudaGetDeviceProperties(&props, dev_info.device_id) == cudaSuccess) {
-#if CUDART_VERSION >= 11020
-      dev_info.l2_cache_size = props.l2CacheSize;
-#else
-      dev_info.l2_cache_size = 40ull * 1024 * 1024;  // fallback
-#endif
-      dev_info.sm_count = props.multiProcessorCount;
-      dev_info.major = props.major;
-    } else {
-      // fallback for A100 默认值
-      dev_info.l2_cache_size = 40ull * 1024 * 1024;
-      dev_info.sm_count = 108;
-      dev_info.major = 8;  // A100 compute capability major
-    }
-    return dev_info;
-  }();
-  return info;
-}
-
-inline int get_device_id() {
-  return get_device_info().device_id;
-}
-inline size_t get_l2_cache_size() {
-  return get_device_info().l2_cache_size;
-}
-inline int get_sm_count() {
-  return get_device_info().sm_count;
-}
-inline int get_major() {
-  return get_device_info().major;
-}
 
 static inline int64_t cdiv(int64_t x, int64_t y) {
   return (x + y - 1) / y;
@@ -65,7 +17,8 @@ static inline int64_t cdiv(int64_t x, int64_t y) {
 bool streamk_scenario(const at::Tensor &a, const at::Tensor &b, int64_t M, int64_t N, int64_t K) {
   bool a_is_half_or_bf16 = (a.scalar_type() == at::kHalf) || (a.scalar_type() == at::kBFloat16);
   bool b_is_half_or_bf16 = (b.scalar_type() == at::kHalf) || (b.scalar_type() == at::kBFloat16);
-  return (a_is_half_or_bf16 && b_is_half_or_bf16 && get_major() == 8 && K > M * 5 && K > N * 5);
+  return (a_is_half_or_bf16 && b_is_half_or_bf16 &&
+          flag_gems::device::current_compute_capability_major() == 8 && K > M * 5 && K > N * 5);
 }
 
 void streamk_mm_tensor(const at::Tensor &a,
@@ -111,8 +64,8 @@ void streamk_mm_tensor(const at::Tensor &a,
 
   // device / stream
   c10::DeviceGuard guard(c.device());
-  c10::cuda::CUDAStream stream = c10::cuda::getCurrentCUDAStream();
-  CUstream raw_stream = static_cast<CUstream>(stream.stream());
+  backend::StreamType stream = backend::getCurrentStream();
+  backend::RawStreamType raw_stream = backend::getRawStream(stream);
 
   if (number_cooperative_tiles > 0) {
     // mini wave handling
@@ -241,6 +194,11 @@ void general_mm_tensor(
   TORCH_CHECK(a.dim() == 2 && b.dim() == 2, "both the tensors must be 2-D");
   TORCH_CHECK(a.dtype() == b.dtype(), "expected a and b to have the same dtype");
 
+  c10::DeviceGuard guard(c.device());
+  backend::StreamType stream = backend::getCurrentStream();
+  backend::RawStreamType raw_stream = backend::getRawStream(stream);
+
+  // CUDA/other path: use ops/mm.py with mm_kernel_general
   const int BLOCK_M = 64;
   const int BLOCK_N = 128;
   const int BLOCK_K = 64;
@@ -248,17 +206,12 @@ void general_mm_tensor(
   const int num_warps = 4;
   const int GROUP_M = 8;
 
-  // general situation
   const TritonJITFunction &f =
       TritonJITFunction::get_instance(std::string(utils::get_flag_gems_src_path() / "ops" / "mm.py"),
                                       "mm_kernel_general");
 
-  c10::DeviceGuard guard(c.device());
-  c10::cuda::CUDAStream stream = c10::cuda::getCurrentCUDAStream();
-  CUstream raw_stream = static_cast<CUstream>(stream.stream());
-
   unsigned int grid_x = cdiv(M, BLOCK_M) * cdiv(N, BLOCK_N);
-  f(/* CUstream = */ raw_stream,
+  f(/* stream = */ raw_stream,
     /* grid_x = */ grid_x,
     /* grid_y = */ 1,
     /* grid_z = */ 1,
@@ -297,7 +250,7 @@ at::Tensor mm_tensor(const at::Tensor &mat1, const at::Tensor &mat2) {
 
   at::Tensor out = at::empty({M, N}, mat1.options());
 
-  int sm_count = get_sm_count();
+  int sm_count = flag_gems::device::current_sm_count();
 
   if (streamk_scenario(mat1, mat2, M, N, K)) {
     streamk_mm_tensor(mat1, mat2, out, M, N, K, sm_count);
@@ -320,7 +273,7 @@ at::Tensor &mm_out_tensor(const at::Tensor &mat1, const at::Tensor &mat2, at::Te
   int64_t K = mat1.size(1);
   int64_t N = mat2.size(1);
 
-  int sm_count = get_sm_count();
+  int sm_count = flag_gems::device::current_sm_count();
 
   if (streamk_scenario(mat1, mat2, M, N, K)) {
     streamk_mm_tensor(mat1, mat2, out, M, N, K, sm_count);

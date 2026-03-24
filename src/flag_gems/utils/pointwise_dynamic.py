@@ -1,5 +1,6 @@
 import importlib
 import os
+from dataclasses import dataclass
 from typing import Callable, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 import torch
@@ -9,6 +10,7 @@ from triton.runtime.jit import JITFunction
 from flag_gems.utils.code_cache import code_cache_dir
 from flag_gems.utils.code_utils import IndentedBuffer, write_atomic
 from flag_gems.utils.codegen_config_utils import CodeGenConfig, get_codegen_config
+from flag_gems.utils.device_info import get_device_capability
 from flag_gems.utils.shape_utils import (
     MemOverlap,
     all_c_contiguous,
@@ -320,11 +322,11 @@ class KernelGenerator:
                         )
 
                 # task space, used to reconstruct multi index
-                task_space_args = _cs(f"s{i}: int" for i in range(ndim))
+                task_space_args = _cs(f"s{i}" for i in range(ndim))
                 code.writeline(f"{task_space_args}, # task_space")
 
                 # number of tasks, used to compute mask
-                code.writeline("num_tasks: int,")
+                code.writeline("num_tasks,")
 
             # tile size & tiles_per_cta, gsl style
             if ndim > 0:
@@ -379,11 +381,11 @@ class KernelGenerator:
                     code.writeline(f"{stride_args}, # strides for out{i}")
 
                 # task space, used to reconstruct multi index
-                task_space_args = _cs(f"s{i}: int" for i in range(ndim))
+                task_space_args = _cs(f"s{i}" for i in range(ndim))
                 code.writeline(f"{task_space_args}, # task_space")
 
                 # number of tasks, used to compute mask
-                code.writeline("num_tasks: int,")
+                code.writeline("num_tasks,")
 
             # tile size & tiles_per_cta, gsl style
             if ndim > 0:
@@ -822,15 +824,23 @@ class WrapperGenerator:
             with code.indent():
                 self.gen_return(code)
             max_tile_size = self.config.max_tile_size
-            code.writeline(
-                f"tile_sizes = heuristics_for_tile_size({max_tile_size}, *shape)"
-            )
+            major, _ = get_device_capability()
+            if self.name.find("fill_scalar") != -1 and major >= 9:
+                code.writeline("tile_sizes = tuple([64])")
+            else:
+                code.writeline(
+                    f"tile_sizes = heuristics_for_tile_size({max_tile_size}, *shape)"
+                )
             code.writeline("tile_size = math.prod(tile_sizes)")
             code.writeline(
                 "num_tiles = math.prod(triton.cdiv(size, tile_size) for size, tile_size in zip(shape, tile_sizes))"
             )
-            max_grid_size0 = self.config.max_grid_size[0]
-            code.writeline(f"num_ctas = min({max_grid_size0}, num_tiles)")
+
+            if self.name.find("fill_scalar") != -1 and major >= 9:
+                code.writeline("num_ctas = num_tiles")
+            else:
+                max_grid_size0 = self.config.max_grid_size[0]
+                code.writeline(f"num_ctas = min({max_grid_size0}, num_tiles)")
 
             code.writeline("tiles_per_cta = triton.cdiv(num_tiles, num_ctas)")
             code.writeline("num_warps = heuristics_for_num_warps(tile_size)")
@@ -850,13 +860,23 @@ class WrapperGenerator:
             with code.indent():
                 self.gen_return(code)
             max_tile_size = self.config.max_tile_size
-            code.writeline(
-                f"tile_sizes = heuristics_for_tile_size({max_tile_size}, num_tasks)"
-            )
+
+            major, _ = get_device_capability()
+            if self.name.find("fill_scalar") != -1 and major >= 9:
+                code.writeline("tile_sizes = tuple([64])")
+            else:
+                code.writeline(
+                    f"tile_sizes = heuristics_for_tile_size({max_tile_size}, num_tasks)"
+                )
+
             code.writeline("tile_size = tile_sizes[0]")
             code.writeline("num_tiles = triton.cdiv(num_tasks, tile_size)")
-            max_grid_size0 = self.config.max_grid_size[0]
-            code.writeline(f"num_ctas = min({max_grid_size0}, num_tiles)")
+
+            if self.name.find("fill_scalar") != -1 and major >= 9:
+                code.writeline("num_ctas = num_tiles")
+            else:
+                max_grid_size0 = self.config.max_grid_size[0]
+                code.writeline(f"num_ctas = min({max_grid_size0}, num_tiles)")
 
             code.writeline("tiles_per_cta = triton.cdiv(num_tiles, num_ctas)")
             code.writeline("num_warps = heuristics_for_num_warps(tile_size)")
@@ -1063,6 +1083,16 @@ class ModuleGenerator:
         return code
 
 
+@dataclass
+class KernelInfo:
+    """Information about a generated kernel for C++ integration."""
+
+    file_path: str
+    kernel_name: str
+    wrapper_name: str
+    ndim: int
+
+
 class PointwiseDynamicFunction:
     """Utility to generate function for general pointwise operation. It generate wrapper & JITFunction
     which are specialized according to the rank of the task space(the broadcasted shape of all input tensors).
@@ -1080,7 +1110,9 @@ class PointwiseDynamicFunction:
         self.config: CodeGenConfig = config or get_codegen_config()
 
         # instantiated & cached overloads
-        self.overloads: Mapping[int, Callable] = {}
+        self.overloads: Mapping[str, Callable] = {}
+        # cached kernel info for C++ integration
+        self._kernel_info_cache: Mapping[str, KernelInfo] = {}
 
     def __call__(self, *args, **kwargs):
         # inputs must be passed by position, outputs must be passed by keyword
@@ -1134,6 +1166,9 @@ class PointwiseDynamicFunction:
             outputs_dtypes_for_allocation.append(dtype)
 
         tensors = out_tensors + in_tensors
+        INT32_MAX = torch.iinfo(torch.int32).max
+        if tensors[0].numel() > INT32_MAX:
+            self.config.prefer_block_pointer = False
         if self.use_fast_path(tensors):  # dimension collapse & use physical ordering
             allocated_outputs = [
                 torch.empty_like(tensors[0], dtype=dtype)
@@ -1228,18 +1263,42 @@ class PointwiseDynamicFunction:
             return item.unwrap()
         return tuple(item.unwrap() for item in tensors)
 
+    def _compute_kernel_names(self, ndim: int) -> Tuple[str, str, str]:
+        """Compute kernel name, wrapper name, and file path for a given ndim.
+
+        This is the single source of truth for naming, used by both instantiate()
+        and get_kernel_info() to ensure consistency.
+
+        Returns:
+            Tuple of (kernel_name, wrapper_name, file_path)
+        """
+        scalar_fn_name = self._scalar_fn.__name__
+        kernel_name = f"{scalar_fn_name}_kernel_rank_{ndim}"
+        wrapper_name = f"{scalar_fn_name}_wrapper_rank_{ndim}"
+
+        file_name = (
+            f"pointwise_dynamic_{self._scalar_fn_cache_key}_{kernel_name}_"
+            f"{'1d_tile_' if self.config.prefer_1d_tile else ''}"
+            f"{'bptr' if (not self.config.prefer_1d_tile and self.config.prefer_block_pointer) else ''}"
+            ".py"
+        )
+        file_path = str(code_cache_dir() / file_name)
+
+        return kernel_name, wrapper_name, file_path
+
     def instantiate(self, ndim):
         # NOTE: manually instantiated overload does not have `prepare_args` as
         # preprocessing, so you have to manually allocate output and make sure that
         # the inputs & ouputs actually fits the manually instantiated overload
-        if ndim in self.overloads:
-            return self.overloads[ndim]
+        key = f"{ndim}_{self.config.prefer_block_pointer}"
+        if key in self.overloads:
+            return self.overloads[key]
 
         code = IndentedBuffer()
 
-        scalar_fn_name = self._scalar_fn.__name__
-        kernel_name = f"{scalar_fn_name}_kernel_rank_{ndim}"
-        wrapper_name = f"{scalar_fn_name}_wrapper_rank_{ndim}"
+        # Use helper to compute names (single source of truth)
+        kernel_name, wrapper_name, file_path = self._compute_kernel_names(ndim)
+
         module_gen = ModuleGenerator(
             self.fx,
             self._scalar_fn,
@@ -1257,14 +1316,6 @@ class PointwiseDynamicFunction:
         # created via exec string. We can help inspect to find the source by hacking linecache
         # library, but we find generating a module simpler, since we can generating 2 functions
         # the kernel and the wrapper, and the wrapper calls the kernel.
-        file_name = (
-            f"pointwise_dynamic_{self._scalar_fn_cache_key}_{kernel_name}_"
-            f"{'1d_tile_' if self.config.prefer_1d_tile else ''}"
-            f"{'bptr' if (not self.config.prefer_1d_tile and self.config.prefer_block_pointer) else ''}"
-            ".py"
-        )
-
-        file_path = code_cache_dir() / file_name
         write_atomic(file_path, code.getvalue())
 
         # load
@@ -1288,8 +1339,39 @@ class PointwiseDynamicFunction:
         m.__dict__[self._scalar_fn.__name__] = self._scalar_fn
 
         overload = getattr(m, wrapper_name)
-        self.overloads[ndim] = overload
+        self.overloads[key] = overload
+
+        # Cache kernel info for C++ integration
+        self._kernel_info_cache[key] = KernelInfo(
+            file_path=file_path,
+            kernel_name=kernel_name,
+            wrapper_name=wrapper_name,
+            ndim=ndim,
+        )
+
         return overload
+
+    def get_kernel_info(self, ndim: int) -> KernelInfo:
+        """Get kernel information for a given ndim.
+
+        This method is useful for C++ integration to get the file path and
+        kernel name without duplicating the naming logic.
+
+        If the kernel hasn't been instantiated yet, this will instantiate it first.
+
+        Args:
+            ndim: The rank of the task space
+
+        Returns:
+            KernelInfo with file_path, kernel_name, wrapper_name, and ndim
+        """
+        key = f"{ndim}_{self.config.prefer_block_pointer}"
+
+        # Ensure the kernel is instantiated
+        if key not in self._kernel_info_cache:
+            self.instantiate(ndim)
+
+        return self._kernel_info_cache[key]
 
 
 def pointwise_dynamic(

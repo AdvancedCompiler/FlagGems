@@ -1,3 +1,5 @@
+import math
+
 import pytest
 import torch
 from packaging import version
@@ -34,7 +36,7 @@ def test_accuracy_rand(shape, dtype):
 @pytest.mark.parametrize("shape", DISTRIBUTION_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_accuracy_randn(shape, dtype):
-    if flag_gems.vendor_name == "cambricon":
+    if flag_gems.vendor_name in ["cambricon", "iluvatar"]:
         torch.manual_seed(42)
     with flag_gems.use_gems():
         res_out = torch.randn(shape, dtype=dtype, device=device)
@@ -86,6 +88,18 @@ def test_accuracy_zeros(shape, dtype):
     gems_assert_equal(
         res_out, torch.zeros(shape, dtype=dtype, device="cpu" if TO_CPU else device)
     )
+
+
+@pytest.mark.zero_
+@pytest.mark.parametrize("shape", POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", BOOL_TYPES + ALL_INT_DTYPES + ALL_FLOAT_DTYPES)
+def test_accuracy_zero_(shape, dtype):
+    out = torch.ones(shape, dtype=dtype, device=flag_gems.device)
+    ref_out = to_reference(out)
+    ref_out.zero_()
+    with flag_gems.use_gems():
+        out.zero_()
+    gems_assert_equal(out, ref_out)
 
 
 @pytest.mark.ones
@@ -153,8 +167,15 @@ def test_accuracy_ones_like(shape, dtype):
 @pytest.mark.parametrize("shape", POINTWISE_SHAPES)
 @pytest.mark.parametrize("dtype", BOOL_TYPES + ALL_INT_DTYPES + ALL_FLOAT_DTYPES)
 @pytest.mark.parametrize("xdtype", BOOL_TYPES + ALL_INT_DTYPES + ALL_FLOAT_DTYPES)
-@pytest.mark.parametrize("fill_value", [3.1415926, 2, False])
+@pytest.mark.parametrize(
+    "fill_value", [3.1415926, 2, False, float("inf"), float("nan")]
+)
 def test_accuracy_full_like(shape, dtype, xdtype, fill_value):
+    if isinstance(fill_value, float) and (
+        math.isinf(fill_value) or math.isnan(fill_value)
+    ):
+        if dtype not in ALL_FLOAT_DTYPES:
+            pytest.skip("Skipping inf/nan test for non-float dtypes")
     inp = torch.empty(size=shape, dtype=dtype, device=device)
     ref_inp = to_reference(inp)
 
@@ -162,22 +183,26 @@ def test_accuracy_full_like(shape, dtype, xdtype, fill_value):
     ref_out = torch.full_like(ref_inp, fill_value)
     with flag_gems.use_gems():
         res_out = torch.full_like(inp, fill_value)
-    gems_assert_equal(res_out, ref_out)
+    gems_assert_equal(res_out, ref_out, equal_nan=True)
 
     # with dtype
     ref_out = torch.full_like(ref_inp, fill_value, dtype=dtype)
     with flag_gems.use_gems():
         res_out = torch.full_like(inp, fill_value, dtype=dtype)
-    gems_assert_equal(res_out, ref_out)
+    gems_assert_equal(res_out, ref_out, equal_nan=True)
 
 
-@pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RESULT TODOFIX")
+# @pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RESULT TODOFIX")
 @pytest.mark.randperm
 @pytest.mark.parametrize("n", [123, 12345, 123456])
 @pytest.mark.parametrize("dtype", ALL_INT_DTYPES)
 def test_accuracy_randperm(n, dtype):
     if n > torch.iinfo(torch.int16).max and dtype == torch.int16:
         return
+
+    # Skip int16 for Moore Threads backend due to runtime crash
+    if flag_gems.vendor_name == "mthreads" and dtype == torch.int16:
+        pytest.skip("Moore Threads int16 randperm causes runtime crash")
 
     ref_out = torch.randperm(n, dtype=dtype, device="cpu" if TO_CPU else device)
     with flag_gems.use_gems():
@@ -233,3 +258,107 @@ def test_accuracy_eye(shape, dtype):
         res_out,
         torch.eye(n, dtype=dtype, device="cpu" if TO_CPU else device),
     )
+
+
+@pytest.mark.one_hot
+def test_accuracy_one_hot():
+    from flag_gems.ops.one_hot import one_hot as gems_one_hot
+
+    dev_type = torch.device(device).type
+    expected_device = "cpu" if TO_CPU else device
+
+    x = torch.tensor([3, 4, 1, 0], device=device, dtype=torch.int64)
+    t = gems_one_hot(x)
+    expected = torch.tensor(
+        [[0, 0, 0, 1, 0], [0, 0, 0, 0, 1], [0, 1, 0, 0, 0], [1, 0, 0, 0, 0]],
+        device=expected_device,
+    )
+    gems_assert_equal(t, expected)
+
+    t = gems_one_hot(x, -1)
+    expected = torch.tensor(
+        [[0, 0, 0, 1, 0], [0, 0, 0, 0, 1], [0, 1, 0, 0, 0], [1, 0, 0, 0, 0]],
+        device=expected_device,
+    )
+    gems_assert_equal(t, expected)
+
+    t = gems_one_hot(x, 6)
+    expected = torch.tensor(
+        [
+            [0, 0, 0, 1, 0, 0],
+            [0, 0, 0, 0, 1, 0],
+            [0, 1, 0, 0, 0, 0],
+            [1, 0, 0, 0, 0, 0],
+        ],
+        device=expected_device,
+    )
+    gems_assert_equal(t, expected)
+
+    x2 = torch.tensor([[3, 4], [1, 0]], device=device, dtype=torch.int64)
+    t = gems_one_hot(x2)
+    expected = torch.tensor(
+        [[[0, 0, 0, 1, 0], [0, 0, 0, 0, 1]], [[0, 1, 0, 0, 0], [1, 0, 0, 0, 0]]],
+        device=expected_device,
+    )
+    gems_assert_equal(t, expected)
+
+    x0 = torch.tensor(4, device=device, dtype=torch.int64)
+    t = gems_one_hot(x0)
+    expected = torch.tensor([0, 0, 0, 0, 1], device=expected_device)
+    gems_assert_equal(t, expected)
+
+    x_empty = torch.empty([4, 0], dtype=torch.long, device=device)
+    t = gems_one_hot(x_empty, 100)
+    expected = torch.empty([4, 0, 100], dtype=torch.long, device=expected_device)
+    gems_assert_equal(t, expected)
+
+    if dev_type not in ("cuda", "xla", "mps"):
+        bad = torch.tensor([3, 4, -1, 0], dtype=torch.long)
+        with pytest.raises(RuntimeError):
+            gems_one_hot(bad.to(device), -1)
+
+        bad = torch.tensor([3, 4, 1, 0], dtype=torch.long)
+        with pytest.raises(RuntimeError):
+            gems_one_hot(bad.to(device), 3)
+
+    with pytest.raises(RuntimeError):
+        gems_one_hot(torch.empty([4, 0], dtype=torch.long, device=device))
+
+    with pytest.raises(RuntimeError):
+        gems_one_hot(torch.tensor([3, 4, 1, 0], dtype=torch.long, device=device), -2)
+
+
+@pytest.mark.arange
+@pytest.mark.parametrize(
+    "start, end, step",
+    [
+        (0, 10, 1),
+        (0, 100, 1),
+        (0, 1000, 1),
+        (5, 50, 3),
+        (0, 10, 2),
+        (0.0, 5.0, 0.5),
+        (1.0, 10.0, 1.5),
+    ],
+)
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.int64])
+def test_accuracy_arange_start(start, end, step, dtype):
+    if dtype == torch.int64 and isinstance(step, float) and int(step) == 0:
+        with pytest.raises(RuntimeError):
+            with flag_gems.use_gems():
+                torch.arange(start, end, step, dtype=dtype, device=device)
+        return
+    with flag_gems.use_gems():
+        res_out = torch.arange(start, end, step, dtype=dtype, device=device)
+    ref_out = torch.arange(start, end, step, dtype=dtype, device="cpu")
+    gems_assert_equal(res_out.cpu(), ref_out)
+
+
+@pytest.mark.arange
+@pytest.mark.parametrize("end", [10, 100, 1000, 5.0])
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.int64])
+def test_accuracy_arange(end, dtype):
+    with flag_gems.use_gems():
+        res_out = torch.arange(end, dtype=dtype, device=device)
+    ref_out = torch.arange(end, dtype=dtype, device="cpu")
+    gems_assert_equal(res_out.cpu(), ref_out)

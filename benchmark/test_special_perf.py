@@ -6,14 +6,172 @@ import torch
 import flag_gems
 from benchmark.attri_util import BOOL_DTYPES, FLOAT_DTYPES, INT_DTYPES, BenchLevel
 from benchmark.performance_utils import (
+    Benchmark,
     Config,
     GenericBenchmark,
     GenericBenchmark2DOnly,
+    GenericBenchmark4DOnly,
     GenericBenchmarkExcluse1D,
     GenericBenchmarkExcluse3D,
+    SkipVersion,
     generate_tensor_input,
     vendor_name,
 )
+
+
+class GroupedTopKBenchmark(Benchmark):
+    def __init__(
+        self,
+        op_name,
+        torch_op,
+        dtypes,
+        renormalize=True,
+        routed_scaling_factor=1.0,
+        scoring_func=0,
+    ):
+        super().__init__(op_name=op_name, torch_op=torch_op, dtypes=dtypes)
+        self.renormalize = renormalize
+        self.routed_scaling_factor = routed_scaling_factor
+        self.scoring_func = scoring_func
+
+    def set_shapes(self, shape_file_path=None):
+        grouped_topk_configs = [
+            (1, 64, 8, 2, 8),
+            (8, 64, 8, 2, 8),
+            (32, 64, 8, 2, 8),
+            (64, 64, 8, 2, 8),
+            (128, 64, 8, 2, 8),
+            (256, 64, 8, 2, 8),
+            (32, 128, 8, 2, 8),
+            (64, 128, 8, 2, 8),
+            (128, 128, 8, 2, 8),
+            (64, 64, 4, 2, 4),
+            (64, 128, 16, 2, 8),
+            (512, 64, 8, 2, 8),
+            (1024, 64, 8, 2, 8),
+            (2048, 64, 8, 2, 8),
+        ]
+        self.shapes = grouped_topk_configs
+
+    def get_input_iter(self, cur_dtype):
+        for config in self.shapes:
+            yield from self.grouped_topk_input_fn(config, cur_dtype, self.device)
+
+    def grouped_topk_input_fn(self, config, dtype, device):
+        num_tokens, num_experts, n_group, topk_group, topk = config
+
+        scores = torch.randn(num_tokens, num_experts, device=device, dtype=dtype)
+        bias = torch.randn(num_experts, device=device, dtype=dtype)
+
+        yield (
+            scores,
+            n_group,
+            topk_group,
+            topk,
+            self.renormalize,
+            self.routed_scaling_factor,
+            bias,
+            self.scoring_func,
+        )
+
+
+@pytest.mark.skipif(
+    SkipVersion("vllm", "<0.9"),
+    reason="The version prior to 0.9 does not include the grouped_topk kernel.",
+)
+@pytest.mark.skipif(
+    SkipVersion("torch", "<2.7"),
+    reason="The version prior to 2.7 is not compatible with VLLM.",
+)
+@pytest.mark.skipif(vendor_name == "metax", reason="TODOFIX")
+@pytest.mark.skipif(vendor_name == "kunlunxin", reason="RESULT TODOFIX")
+@pytest.mark.skipif(vendor_name == "iluvatar", reason="RESULT TODOFIX")
+@pytest.mark.skipif(vendor_name == "mthreads", reason="RESULT TODOFIX")
+@pytest.mark.skipif(vendor_name == "hygon", reason="RuntimeError")
+@pytest.mark.skipif(flag_gems.vendor_name == "cambricon", reason="TypeError")
+@pytest.mark.grouped_topk
+def test_perf_grouped_topk():
+    try:
+        from vllm._custom_ops import grouped_topk as vllm_grouped_topk
+    except (ImportError, AttributeError) as e:
+        pytest.skip(f"Skipped due to missing vLLM grouped_topk: {e}")
+
+    bench = GroupedTopKBenchmark(
+        op_name="grouped_topk",
+        torch_op=vllm_grouped_topk,
+        dtypes=[torch.float32, torch.bfloat16],
+        renormalize=True,
+        scoring_func=0,
+    )
+
+    bench.set_gems(flag_gems.grouped_topk)
+    bench.run()
+
+
+@pytest.mark.skipif(
+    SkipVersion("vllm", "<0.9"),
+    reason="The version prior to 0.9 does not include the grouped_topk kernel.",
+)
+@pytest.mark.skipif(
+    SkipVersion("torch", "<2.7"),
+    reason="The version prior to 2.7 is not compatible with VLLM.",
+)
+@pytest.mark.skipif(vendor_name == "metax", reason="TODOFIX")
+@pytest.mark.skipif(vendor_name == "kunlunxin", reason="RESULT TODOFIX")
+@pytest.mark.skipif(vendor_name == "iluvatar", reason="RESULT TODOFIX")
+@pytest.mark.skipif(vendor_name == "mthreads", reason="RESULT TODOFIX")
+@pytest.mark.skipif(vendor_name == "hygon", reason="RuntimeError")
+@pytest.mark.skipif(flag_gems.vendor_name == "cambricon", reason="TypeError")
+@pytest.mark.grouped_topk
+def test_perf_grouped_topk_no_renorm():
+    try:
+        from vllm._custom_ops import grouped_topk as vllm_grouped_topk
+    except (ImportError, AttributeError) as e:
+        pytest.skip(f"Skipped due to missing vLLM grouped_topk: {e}")
+
+    bench = GroupedTopKBenchmark(
+        op_name="grouped_topk_no_renorm",
+        torch_op=vllm_grouped_topk,
+        dtypes=[torch.float32, torch.bfloat16],
+        renormalize=False,
+        scoring_func=0,
+    )
+
+    bench.set_gems(flag_gems.grouped_topk)
+    bench.run()
+
+
+@pytest.mark.skipif(
+    SkipVersion("vllm", "<0.9"),
+    reason="The version prior to 0.9 does not include the grouped_topk kernel.",
+)
+@pytest.mark.skipif(
+    SkipVersion("torch", "<2.7"),
+    reason="The version prior to 2.7 is not compatible with VLLM.",
+)
+@pytest.mark.skipif(vendor_name == "metax", reason="TODOFIX")
+@pytest.mark.skipif(vendor_name == "kunlunxin", reason="RESULT TODOFIX")
+@pytest.mark.skipif(vendor_name == "iluvatar", reason="RESULT TODOFIX")
+@pytest.mark.skipif(vendor_name == "mthreads", reason="RESULT TODOFIX")
+@pytest.mark.skipif(vendor_name == "hygon", reason="RuntimeError")
+@pytest.mark.skipif(flag_gems.vendor_name == "cambricon", reason="TypeError")
+@pytest.mark.grouped_topk_sigmoid
+def test_perf_grouped_topk_sigmoid():
+    try:
+        from vllm._custom_ops import grouped_topk as vllm_grouped_topk
+    except (ImportError, AttributeError) as e:
+        pytest.skip(f"Skipped due to missing vLLM grouped_topk: {e}")
+
+    bench = GroupedTopKBenchmark(
+        op_name="grouped_topk_sigmoid",
+        torch_op=vllm_grouped_topk,
+        dtypes=[torch.float32, torch.bfloat16],
+        renormalize=True,
+        scoring_func=1,
+    )
+
+    bench.set_gems(flag_gems.grouped_topk)
+    bench.run()
 
 
 def topk_input_fn(shape, dtype, device):
@@ -29,7 +187,10 @@ def topk_input_fn(shape, dtype, device):
 
 def resolve_neg_input_fn(shape, dtype, device):
     x = torch.randn(size=shape, dtype=dtype, device=device)
-    yield x.conj().imag,
+    if vendor_name == "mthreads":
+        yield x.conj(),
+    else:
+        yield x.conj().imag,
 
 
 def resolve_conj_input_fn(shape, dtype, device):
@@ -60,15 +221,13 @@ special_operations = [
     ],
 )
 def test_special_operations_benchmark(op_name, torch_op, dtypes, input_fn):
-    if vendor_name == "mthreads" and op_name in ["resolve_neg", "resolve_conj"]:
-        pytest.skip("Torch not supported complex")
     bench = GenericBenchmarkExcluse1D(
         input_fn=input_fn, op_name=op_name, dtypes=dtypes, torch_op=torch_op
     )
     bench.run()
 
 
-@pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RuntimeError")
+# @pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RuntimeError")
 @pytest.mark.isin
 def test_isin_perf():
     def isin_input_fn(shape, dtype, device):
@@ -92,7 +251,7 @@ def test_isin_perf():
     bench.run()
 
 
-@pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RuntimeError")
+# @pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RuntimeError")
 @pytest.mark.unique
 def test_perf_unique():
     def unique_input_fn(shape, dtype, device):
@@ -108,8 +267,7 @@ def test_perf_unique():
     bench.run()
 
 
-@pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RuntimeError")
-@pytest.mark.skipif(vendor_name == "kunlunxin", reason="RESULT TODOFIX")
+# @pytest.mark.skipif(flag_gems.vendor_name == "hygon", reason="RuntimeError")
 @pytest.mark.sort
 def test_perf_sort():
     class SortBenchmark(GenericBenchmark2DOnly):
@@ -215,7 +373,7 @@ def test_perf_embedding():
     bench.run()
 
 
-@pytest.mark.embedding_backward
+@pytest.mark.embedding
 def test_perf_embedding_backward():
     bench = EmbeddingBenchmark(
         input_fn=embedding_backward_input_fn,
@@ -228,6 +386,48 @@ def test_perf_embedding_backward():
         is_backward=True,
     )
     bench.run()
+
+
+class EmbeddingDenseBackwardBenchmark(GenericBenchmark):
+    def set_shapes(self, shape_file_path=None):
+        self.shapes = [
+            (32, 2048, 128, 8192),
+            (16, 2048, 256, 16384),
+            (8, 4096, 256, 32768),
+        ]
+
+
+@pytest.mark.skipif(
+    (not torch.cuda.is_available()) or (flag_gems.device != "cuda"),
+    reason="CUDA backend is not available for this benchmark.",
+)
+@pytest.mark.embedding_dense_backward
+def test_perf_embedding_dense_backward():
+    bench = EmbeddingDenseBackwardBenchmark(
+        input_fn=embedding_dense_backward_input_fn,
+        op_name="embedding_dense_backward",
+        torch_op=torch.ops.aten.embedding_dense_backward,
+        dtypes=FLOAT_DTYPES,
+    )
+    bench.run()
+
+
+def embedding_dense_backward_input_fn(shape, dtype, device):
+    B, M, D, num_weights = shape
+
+    grad_output = torch.randn((B, M, D), device=device, dtype=dtype)
+    indices = torch.randint(0, num_weights, (B, M), device=device, dtype=torch.long)
+
+    def inject_padding_idx(cur_indices: torch.Tensor, padding_idx: int) -> torch.Tensor:
+        if padding_idx < 0:
+            return cur_indices
+        mask = torch.rand((B, M), device=device) < 0.25
+        return torch.where(mask, torch.full_like(cur_indices, padding_idx), cur_indices)
+
+    test_cases = [(-1, False), (0, True), (5, False)]
+    for padding_idx, scale_grad_by_freq in test_cases:
+        cur_indices = inject_padding_idx(indices, padding_idx)
+        yield grad_output, cur_indices, num_weights, padding_idx, scale_grad_by_freq
 
 
 def lerp_input_fn(shape, dtype, device):
@@ -245,6 +445,10 @@ class LerpBenchmark(GenericBenchmark):
 
 
 @pytest.mark.lerp
+@pytest.mark.skipif(
+    vendor_name == "kunlunxin" and SkipVersion("torch", "<2.5"),
+    reason="The half dtype is only supported on torch >= 2.5.",
+)
 def test_perf_lerp():
     bench = LerpBenchmark(
         input_fn=lerp_input_fn,
@@ -256,6 +460,10 @@ def test_perf_lerp():
 
 
 @pytest.mark.lerp_
+@pytest.mark.skipif(
+    vendor_name == "kunlunxin" and SkipVersion("torch", "<2.5"),
+    reason="The half dtype is only supported on torch >= 2.5.",
+)
 def test_perf_lerp_inplace():
     bench = LerpBenchmark(
         input_fn=lerp_input_fn,
@@ -307,6 +515,53 @@ def test_perf_upsample_bicubic2d_aa():
     bench.run()
 
 
+@pytest.mark.upsample_linear1d
+@pytest.mark.parametrize("align_corners", [False, True])
+def test_perf_upsample_linear1d(align_corners):
+    def upsample_linear1d_input_fn(shape, dtype, device):
+        batch, channel, height, width = shape
+        length = height * width
+        input = torch.randn((batch, channel, length), device=device, dtype=dtype)
+        scale_factors = 2
+        output_size = int(length * scale_factors)
+        yield {
+            "input": input,
+            "output_size": (output_size,),
+            "align_corners": align_corners,
+        },
+
+    bench = UpsampleBenchmark(
+        input_fn=upsample_linear1d_input_fn,
+        op_name=f"upsample_linear1d_align_{align_corners}",
+        torch_op=torch._C._nn.upsample_linear1d,
+        dtypes=FLOAT_DTYPES,
+    )
+    bench.run()
+
+
+@pytest.mark.upsample_nearest1d
+def test_perf_upsample_nearest1d():
+    def upsample_nearest1d_input_fn(shape, dtype, device):
+        batch, channel, height, width = shape
+        length = height * width  # flatten spatial dims to 1D length
+        input = torch.randn((batch, channel, length), device=device, dtype=dtype)
+        scale_factors = 2
+        output_size = int(length * scale_factors)
+        yield {
+            "input": input,
+            "output_size": (output_size,),
+            "scales": None,
+        },
+
+    bench = UpsampleBenchmark(
+        input_fn=upsample_nearest1d_input_fn,
+        op_name="upsample_nearest1d",
+        torch_op=torch._C._nn.upsample_nearest1d,
+        dtypes=FLOAT_DTYPES,
+    )
+    bench.run()
+
+
 @pytest.mark.upsample_nearest2d
 def test_perf_upsample_nearest2d():
     def upsample_nearest2d_input_fn(shape, dtype, device):
@@ -328,6 +583,40 @@ def test_perf_upsample_nearest2d():
         input_fn=upsample_nearest2d_input_fn,
         op_name="upsample_nearest2d",
         torch_op=torch._C._nn.upsample_nearest2d,
+        dtypes=FLOAT_DTYPES,
+    )
+    bench.run()
+
+
+@pytest.mark.upsample_nearest3d
+def test_perf_upsample_nearest3d():
+    def upsample_nearest3d_input_fn(shape, dtype, device):
+        batch, channel, height, width = shape
+        depth = 4
+        width = width // 4
+        new_height = height // depth
+        real_shape = (batch, channel, depth, new_height, width)
+
+        input = torch.randn(size=real_shape, device=device, dtype=dtype)
+        scale_factors = (2.0, 2.0, 2.0)
+        output_size = (
+            int(depth * scale_factors[0]),
+            int(new_height * scale_factors[1]),
+            int(width * scale_factors[2]),
+        )
+
+        yield {
+            "input": input,
+            "output_size": output_size,
+            "scales_d": None,
+            "scales_h": None,
+            "scales_w": None,
+        },
+
+    bench = UpsampleBenchmark(
+        input_fn=upsample_nearest3d_input_fn,
+        op_name="upsample_nearest3d",
+        torch_op=torch._C._nn.upsample_nearest3d,
         dtypes=FLOAT_DTYPES,
     )
     bench.run()
@@ -390,8 +679,10 @@ def test_perf_diagonal_backward():
     bench.run()
 
 
-@pytest.mark.skipif(vendor_name == "kunlunxin", reason="RESULT TODOFIX")
-@pytest.mark.skipif(vendor_name == "cambricon", reason="TODOFIX")
+@pytest.mark.skipif(
+    vendor_name == "kunlunxin" and SkipVersion("torch", "<2.5"),
+    reason="only support torch >= 2.5.",
+)
 @pytest.mark.kron
 def test_perf_kron():
     class KronBenchmark(GenericBenchmark2DOnly):
@@ -515,4 +806,295 @@ def test_perf_rwkv_ka_fusion():
         dtypes=FLOAT_DTYPES,
     )
     bench.set_gems(gems_op)
+    bench.run()
+
+
+@pytest.mark.moe_sum
+def test_perf_moe_sum():
+    def moe_sum_input_fn(shape, dtype, device):
+        shape = (shape[0], 1, shape[1]) if len(shape) == 2 else shape
+        num_tokens, topk, hidden_size = shape
+        input_tensor = torch.randn(
+            num_tokens,
+            topk,
+            hidden_size,
+            dtype=dtype,
+            device=device,
+            requires_grad=False,
+        )
+
+        output_tensor = torch.empty(
+            num_tokens, hidden_size, dtype=dtype, device=device, requires_grad=False
+        )
+        yield input_tensor, output_tensor
+
+    def torch_op(input_tensor, output_tensor):
+        output_tensor.copy_(input_tensor.sum(dim=1))
+
+    gems_op = flag_gems.moe_sum
+
+    bench = GenericBenchmarkExcluse1D(
+        input_fn=moe_sum_input_fn,
+        op_name="moe_sum",
+        torch_op=torch_op,
+        dtypes=FLOAT_DTYPES,
+    )
+    bench.set_gems(gems_op)
+    bench.run()
+
+
+try:
+    import os
+
+    os.environ["VLLM_CONFIGURE_LOGGING"] = "0"
+    import vllm._custom_ops as vllm_ops
+
+    HAS_VLLM = True
+    WARP_SIZE = 32
+except ImportError:
+    HAS_VLLM = False
+
+
+@pytest.mark.moe_align_block_size
+@pytest.mark.skipif(not HAS_VLLM, reason="vllm not installed")
+def test_perf_moe_align_block_size():
+    def moe_align_block_size_input_fn(shape, dtype, device):
+        num_experts = shape[0]
+        block_size = shape[1]
+        dtype = torch.int32
+        topk_ids = torch.randint(
+            0, num_experts, (shape[2], shape[3]), dtype=dtype, device=device
+        )
+        max_num_tokens_padded = ((num_experts + WARP_SIZE - 1) // WARP_SIZE) * WARP_SIZE
+
+        # padded_num_experts in vllm._custom_ops.moe_align_block_size
+        # must be less than 1024
+        if max_num_tokens_padded >= 1024:
+            return
+
+        sorted_ids = torch.empty((max_num_tokens_padded,), dtype=dtype, device=device)
+        max_num_m_blocks = max_num_tokens_padded // block_size
+        expert_ids = torch.empty((max_num_m_blocks,), dtype=dtype, device=device)
+        num_tokens_post_pad = torch.empty(1, dtype=dtype, device=device)
+
+        yield (
+            topk_ids,
+            num_experts,
+            block_size,
+            sorted_ids,
+            expert_ids,
+            num_tokens_post_pad,
+        )
+
+    class MoeAlignBlockSizeBenchmark(GenericBenchmark4DOnly):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+
+        def set_shapes(self, shape_file_path: None):
+            moe_align_block_size_shape = [
+                (512, 64, 16384, 10),
+                (512, 64, 6152, 10),
+                (512, 64, 4727, 10),
+                (512, 64, 1905, 10),
+                (512, 64, 11575, 10),
+                (512, 64, 1032, 10),
+                (512, 64, 4201, 10),
+                (512, 64, 2056, 10),
+                (512, 64, 7561, 10),
+                (512, 64, 4104, 10),
+                (512, 64, 14281, 10),
+            ]
+            self.shapes = moe_align_block_size_shape
+
+        def set_more_shapes(self):
+            return None
+
+    gems_op = flag_gems.moe_align_block_size_triton
+    bench = MoeAlignBlockSizeBenchmark(
+        op_name="moe_align_block_size_triton",
+        input_fn=moe_align_block_size_input_fn,
+        torch_op=vllm_ops.moe_align_block_size,
+        dtypes=[
+            torch.int32,
+        ],
+    )
+
+    bench.set_gems(gems_op)
+    bench.run()
+
+
+@pytest.mark.replication_pad3d
+def test_perf_replication_pad3d():
+    def replication_pad3d_input_fn(shape, dtype, device):
+        input_tensor = torch.randn(shape, dtype=dtype, device=device)
+        p = random.randint(1, 3)
+        padding = (p, p, p, p, p, p)
+        yield input_tensor, {"padding": padding}
+
+    def torch_replication_pad3d(input, padding):
+        return torch.nn.functional.pad(input, padding, mode="replicate")
+
+    def gems_wrapper(input, padding):
+        return flag_gems.replication_pad3d(input, padding)
+
+    class ReplicationPad3dBenchmark(GenericBenchmarkExcluse3D):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+
+        def set_shapes(self, shape_file_path=None):
+            replication_pad3d_shapes = [
+                (1, 3, 16, 256, 256),
+                (4, 16, 32, 64, 64),
+                (8, 64, 8, 32, 32),
+                (2, 32, 16, 128, 128),
+                (1, 1, 64, 128, 128),
+            ]
+            self.shapes = replication_pad3d_shapes
+
+        def set_more_shapes(self):
+            return None
+
+    bench = ReplicationPad3dBenchmark(
+        input_fn=replication_pad3d_input_fn,
+        op_name="replication_pad3d",
+        torch_op=torch_replication_pad3d,
+        dtypes=FLOAT_DTYPES,
+    )
+    bench.set_gems(gems_wrapper)
+    bench.run()
+
+
+def torch_per_token_group_quant_fp8_ref(x, group_size, scale_ue8m0):
+    dtype = flag_gems.SUPPORTED_FP8_DTYPE
+    eps = 1e-10
+    assert (
+        x.shape[-1] % group_size == 0
+    ), "the last dimension of `x` cannot be divisible by `group_size`"
+    assert x.is_contiguous(), "`x` is not contiguous"
+
+    finfo = torch.finfo(dtype)
+    fp8_min = finfo.min
+    fp8_max = finfo.max
+
+    x_ = x.reshape(x.numel() // group_size, group_size)
+    amax = x_.abs().max(dim=-1, keepdim=True)[0].clamp(min=eps).to(torch.float32)
+    x_s = amax / fp8_max
+    if scale_ue8m0:
+        min_val = torch.tensor(1e-10, dtype=x_s.dtype, device=x_s.device)
+        x_s = torch.exp2(torch.ceil(torch.log2(torch.maximum(x_s.abs(), min_val))))
+    x_q = (x_ / x_s).clamp(min=fp8_min, max=fp8_max).to(dtype)
+    x_q = x_q.reshape(x.shape)
+    x_s = x_s.reshape(x.shape[:-1] + (x.shape[-1] // group_size,))
+    return x_q, x_s
+
+
+class PerTokenGroupQuantFp8Benchmark(GenericBenchmark):
+    """
+    benchmark for per_token_group_quant_fp8
+    """
+
+    def set_more_shapes(self):
+        return None
+
+
+@pytest.mark.per_token_group_quant_fp8
+def test_perf_per_token_group_quant_fp8():
+    def input_kwargs(shape, dtype, device):
+        (
+            num_tokens,
+            d,
+            group_size,
+        ) = shape
+        scale_ue8m0 = random.choice([True, False])
+        x = torch.rand(num_tokens, d, dtype=dtype, device=device)
+
+        yield (
+            x,
+            group_size,
+            scale_ue8m0,
+        )
+
+    bench = PerTokenGroupQuantFp8Benchmark(
+        op_name="per_token_group_quant_fp8",
+        input_fn=input_kwargs,
+        torch_op=torch_per_token_group_quant_fp8_ref,
+        dtypes=[torch.bfloat16],
+    )
+    bench.set_gems(flag_gems.per_token_group_quant_fp8)
+    bench.run()
+
+
+@pytest.mark.upsample_bicubic2d
+@pytest.mark.parametrize("align_corners", [False, True])
+def test_perf_upsample_bicubic2d(align_corners):
+    def upsample_bicubic2d_input_fn(shape, dtype, device):
+        input = torch.randn(shape, device=device, dtype=dtype)
+        scale_factors = [2.0, 2.0]
+        output_size = None
+        yield {
+            "input": input,
+            "output_size": output_size,
+            "align_corners": align_corners,
+            "scale_factors": scale_factors,
+        },
+
+    bench = UpsampleBenchmark(
+        input_fn=upsample_bicubic2d_input_fn,
+        op_name=f"upsample_bicubic2d_align_{align_corners}",
+        torch_op=torch._C._nn.upsample_bicubic2d,
+        dtypes=FLOAT_DTYPES,
+    )
+    bench.run()
+
+
+@pytest.mark.unfold
+def test_perf_unfold_backward():
+    def unfold_backward_input_fn(config, dtype, device):
+        input_sizes, dim, size, step = config
+        d = dim % len(input_sizes)
+        num_windows = (input_sizes[d] - size) // step + 1
+        grad_shape = (
+            list(input_sizes[:d]) + [num_windows] + list(input_sizes[d + 1 :]) + [size]
+        )
+        grad_in = torch.randn(grad_shape, dtype=dtype, device=device)
+        yield grad_in, list(input_sizes), dim, size, step
+
+    class UnfoldBackwardBenchmark(Benchmark):
+        def set_shapes(self, shape_file_path=None):
+            self.shapes = [
+                ((32, 64), 1, 16, 16),
+                ((16, 33), 0, 5, 2),
+                ((4, 8, 12), -1, 6, 4),
+                ((7, 13), 1, 13, 3),
+                ((6, 20), 1, 7, 4),
+                ((2, 3, 17), -1, 9, 1),
+                ((2, 17), 1, 4, 6),
+            ]
+
+        def set_more_shapes(self):
+            return None
+
+        def get_input_iter(self, cur_dtype):
+            for config in self.shapes:
+                yield from unfold_backward_input_fn(config, cur_dtype, self.device)
+
+    bench = UnfoldBackwardBenchmark(
+        op_name="unfold_backward",
+        torch_op=torch.ops.aten.unfold_backward,
+        dtypes=[torch.float16, torch.float32, torch.bfloat16],
+    )
+    bench.set_gems(flag_gems.unfold_backward)
+    bench.run()
+
+
+@pytest.mark.lift_fresh_copy
+def test_perf_lift_fresh_copy():
+    bench = GenericBenchmark(
+        input_fn=lambda shape, dtype, device: (
+            iter([(torch.randn(shape, dtype=dtype, device=device),)])
+        ),
+        op_name="lift_fresh_copy",
+        torch_op=torch.ops.aten.lift_fresh_copy,
+        dtypes=FLOAT_DTYPES,
+    )
     bench.run()

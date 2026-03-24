@@ -41,6 +41,19 @@ def true_divide(A, B):
         return torch.tensor(A / B)
 
 
+def true_divide_out(A, B, out):
+    logger.debug("GEMS TRUE_DIVIDE OUT")
+    if isinstance(A, torch.Tensor) and isinstance(B, torch.Tensor):
+        return true_div_func(A, B, out0=out)
+    elif isinstance(A, torch.Tensor):
+        return true_div_func_tensor_scalar(A, B, out0=out)
+    elif isinstance(B, torch.Tensor):
+        return true_div_func_scalar_tensor(A, B, out0=out)
+    else:
+        # Both scalar
+        return torch.tensor(A / B) if out is None else out.fill_(A / B)
+
+
 def true_divide_(A, B):
     logger.debug("GEMS TRUE_DIVIDE_")
     if isinstance(B, torch.Tensor):
@@ -190,6 +203,7 @@ def floor_divide_(A, B):
 
 
 def div_mode(A, B, rounding_mode=None):
+    logger.debug("GEMS DIV_MODE")
     if rounding_mode is None:
         return true_divide(A, B)
     elif rounding_mode == "trunc":
@@ -202,6 +216,7 @@ def div_mode(A, B, rounding_mode=None):
 
 
 def div_mode_(A, B, rounding_mode=None):
+    logger.debug("GEMS DIV_MODE_")
     if rounding_mode is None:
         return true_divide_(A, B)
     elif rounding_mode == "trunc":
