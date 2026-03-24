@@ -91,9 +91,6 @@ glu_backward_ops = [
 ]
 
 
-@pytest.mark.geglu
-@pytest.mark.reglu
-@pytest.mark.swiglu
 @pytest.mark.parametrize(
     "op_name, tex_attr_name, dtypes",
     [
@@ -128,9 +125,6 @@ def test_tex_glu_forward_perf(op_name, tex_attr_name, dtypes):
     bench.run()
 
 
-@pytest.mark.dreglu
-@pytest.mark.dswiglu
-@pytest.mark.dgeglu
 @pytest.mark.parametrize(
     "op_name, tex_attr_name, dtypes",
     [

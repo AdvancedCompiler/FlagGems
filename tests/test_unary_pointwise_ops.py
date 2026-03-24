@@ -367,7 +367,7 @@ def test_accuracy_geglu(shape, dtype):
     gems_assert_close(res_out, ref_out, dtype)
 
 
-@pytest.mark.dgeglu
+@pytest.mark.geglu
 @pytest.mark.parametrize("shape", POINTWISE_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 @pytest.mark.skipif(not TE_AVAILABLE, reason="transformer engine is not available")
@@ -525,7 +525,7 @@ VALID_POINTWISE_SHAPES = filter_valid_shapes(SWIGLU_SPECIAL_SHAPES)
 @pytest.mark.parametrize("shape", VALID_POINTWISE_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 @pytest.mark.skipif(not TE_AVAILABLE, reason="transformer engine is not available")
-def test_accuracy_swiglu_forward(shape: tuple[int, ...], dtype: torch.dtype):
+def test_accuracy_swiglu(shape: tuple[int, ...], dtype: torch.dtype):
     torch.manual_seed(42)
     device = flag_gems.device
 
@@ -544,7 +544,7 @@ def test_accuracy_swiglu_forward(shape: tuple[int, ...], dtype: torch.dtype):
 @pytest.mark.parametrize("shape", VALID_POINTWISE_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 @pytest.mark.skipif(not TE_AVAILABLE, reason="transformer engine is not available")
-def test_accuracy_swiglu_backward(shape: tuple[int, ...], dtype: torch.dtype):
+def test_accuracy_dswiglu(shape: tuple[int, ...], dtype: torch.dtype):
     torch.manual_seed(42)
     device = flag_gems.device
 
@@ -1722,7 +1722,7 @@ DREGU_SHAPES = [
 ]
 
 
-@pytest.mark.dreglu
+@pytest.mark.reglu
 @pytest.mark.parametrize("shape", DREGU_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 @pytest.mark.skipif(not TE_AVAILABLE, reason="transformer engine is not available")
