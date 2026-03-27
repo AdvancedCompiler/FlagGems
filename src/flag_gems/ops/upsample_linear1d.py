@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 @triton.jit
-def upsample_linear1d_kernel_optimized(
+def upsample_linear1d_kernel(
     input_ptr,
     output_ptr,
     NC,
@@ -79,15 +79,15 @@ def upsample_linear1d(
 
     if align_corners:
         if W_out > 1:
-            scale_val = float((W_in - 1.0) / (W_out - 1.0))
+            scale_val = (W_in - 1.0) / (W_out - 1.0)
         else:
             scale_val = 0.0
         bias_val = 0.0
     else:
         if scales is not None:
-            real_scale = float(1.0 / scales)
+            real_scale = 1.0 / scales
         else:
-            real_scale = float(W_in / W_out)
+            real_scale = W_in / W_out
 
         scale_val = real_scale
         bias_val = 0.5 * real_scale - 0.5
@@ -95,7 +95,7 @@ def upsample_linear1d(
     BLOCK_SIZE = 256
     grid = (NC, triton.cdiv(W_out, BLOCK_SIZE))
 
-    upsample_linear1d_kernel_optimized[grid](
+    upsample_linear1d_kernel[grid](
         inp,
         out,
         NC,
