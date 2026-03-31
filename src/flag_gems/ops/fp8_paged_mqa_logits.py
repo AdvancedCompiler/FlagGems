@@ -9,66 +9,64 @@ def cdiv(x: int, y: int) -> int:
 
 @triton.autotune(
     configs=[
-        # ---- BLOCK_D=128, NUM_D_TILES=1 (dim=128) ----
         triton.Config(
-            {"BLOCK_KV": 16, "BLOCK_D": 128, "NUM_D_TILES": 1, "HEADS_UNROLL": 4},
-            num_warps=4,
-            num_stages=3,
-        ),
-        triton.Config(
-            {"BLOCK_KV": 16, "BLOCK_D": 128, "NUM_D_TILES": 1, "HEADS_UNROLL": 8},
-            num_warps=4,
-            num_stages=3,
-        ),
-        triton.Config(
-            {"BLOCK_KV": 16, "BLOCK_D": 128, "NUM_D_TILES": 1, "HEADS_UNROLL": 4},
+            {"BLOCK_KV": 64, "BLOCK_D": 128, "NUM_D_TILES": 1, "BLOCK_H": 32},
             num_warps=8,
-            num_stages=3,
+            num_stages=2,
         ),
         triton.Config(
-            {"BLOCK_KV": 32, "BLOCK_D": 128, "NUM_D_TILES": 1, "HEADS_UNROLL": 4},
-            num_warps=4,
-            num_stages=3,
-        ),
-        triton.Config(
-            {"BLOCK_KV": 32, "BLOCK_D": 128, "NUM_D_TILES": 1, "HEADS_UNROLL": 8},
-            num_warps=4,
-            num_stages=3,
-        ),
-        triton.Config(
-            {"BLOCK_KV": 32, "BLOCK_D": 128, "NUM_D_TILES": 1, "HEADS_UNROLL": 4},
+            {"BLOCK_KV": 64, "BLOCK_D": 128, "NUM_D_TILES": 1, "BLOCK_H": 16},
             num_warps=8,
-            num_stages=3,
+            num_stages=2,
         ),
         triton.Config(
-            {"BLOCK_KV": 64, "BLOCK_D": 128, "NUM_D_TILES": 1, "HEADS_UNROLL": 4},
+            {"BLOCK_KV": 64, "BLOCK_D": 128, "NUM_D_TILES": 1, "BLOCK_H": 8},
             num_warps=4,
             num_stages=2,
         ),
         triton.Config(
-            {"BLOCK_KV": 64, "BLOCK_D": 128, "NUM_D_TILES": 1, "HEADS_UNROLL": 8},
+            {"BLOCK_KV": 128, "BLOCK_D": 128, "NUM_D_TILES": 1, "BLOCK_H": 32},
             num_warps=8,
             num_stages=2,
         ),
-        # ---- BLOCK_D=64, NUM_D_TILES=2 ----
         triton.Config(
-            {"BLOCK_KV": 16, "BLOCK_D": 64, "NUM_D_TILES": 2, "HEADS_UNROLL": 4},
-            num_warps=4,
-            num_stages=3,
+            {"BLOCK_KV": 128, "BLOCK_D": 128, "NUM_D_TILES": 1, "BLOCK_H": 16},
+            num_warps=8,
+            num_stages=2,
         ),
         triton.Config(
-            {"BLOCK_KV": 32, "BLOCK_D": 64, "NUM_D_TILES": 2, "HEADS_UNROLL": 4},
+            {"BLOCK_KV": 32, "BLOCK_D": 128, "NUM_D_TILES": 1, "BLOCK_H": 32},
             num_warps=4,
-            num_stages=3,
+            num_stages=2,
         ),
         triton.Config(
-            {"BLOCK_KV": 32, "BLOCK_D": 64, "NUM_D_TILES": 2, "HEADS_UNROLL": 8},
-            num_warps=4,
-            num_stages=3,
+            {"BLOCK_KV": 64, "BLOCK_D": 64, "NUM_D_TILES": 2, "BLOCK_H": 16},
+            num_warps=8,
+            num_stages=2,
         ),
         triton.Config(
-            {"BLOCK_KV": 64, "BLOCK_D": 64, "NUM_D_TILES": 2, "HEADS_UNROLL": 4},
+            {"BLOCK_KV": 64, "BLOCK_D": 64, "NUM_D_TILES": 2, "BLOCK_H": 8},
             num_warps=4,
+            num_stages=2,
+        ),
+        triton.Config(
+            {"BLOCK_KV": 128, "BLOCK_D": 64, "NUM_D_TILES": 2, "BLOCK_H": 16},
+            num_warps=8,
+            num_stages=2,
+        ),
+        triton.Config(
+            {"BLOCK_KV": 64, "BLOCK_D": 64, "NUM_D_TILES": 1, "BLOCK_H": 16},
+            num_warps=4,
+            num_stages=2,
+        ),
+        triton.Config(
+            {"BLOCK_KV": 64, "BLOCK_D": 64, "NUM_D_TILES": 1, "BLOCK_H": 8},
+            num_warps=4,
+            num_stages=2,
+        ),
+        triton.Config(
+            {"BLOCK_KV": 128, "BLOCK_D": 64, "NUM_D_TILES": 1, "BLOCK_H": 16},
+            num_warps=8,
             num_stages=2,
         ),
     ],
@@ -105,7 +103,7 @@ def fp8_paged_mqa_logits_kernel(
     BLOCK_KV: tl.constexpr,
     BLOCK_D: tl.constexpr,
     NUM_D_TILES: tl.constexpr,
-    HEADS_UNROLL: tl.constexpr,
+    BLOCK_H: tl.constexpr,
 ):
     pid_row = tl.program_id(0)
     pid_kv_tile = tl.program_id(1)
@@ -118,6 +116,11 @@ def fp8_paged_mqa_logits_kernel(
 
     kv_start = pid_kv_tile * BLOCK_KV
     if kv_start >= context_len:
+        offs_kv = tl.arange(0, BLOCK_KV)
+        kv_pos = kv_start + offs_kv
+        out_mask = kv_pos < max_model_len
+        out_ptrs = logits_ptr + pid_row * stride_lrow + kv_pos * stride_lcol
+        tl.store(out_ptrs, float("-inf"), mask=out_mask)
         return
 
     offs_kv = tl.arange(0, BLOCK_KV)
@@ -139,91 +142,111 @@ def fp8_paged_mqa_logits_kernel(
     kv_base = phys_block_ids * stride_kvblk + intra_block_pos * stride_kvpos
 
     scale_addr = kv_base + dim * stride_kvbyte
-    b0 = tl.load(kv_ptr + scale_addr, mask=valid_mask, other=0).to(tl.uint32)
-    b1 = tl.load(kv_ptr + scale_addr + stride_kvbyte, mask=valid_mask, other=0).to(
-        tl.uint32
-    )
-    b2 = tl.load(kv_ptr + scale_addr + 2 * stride_kvbyte, mask=valid_mask, other=0).to(
-        tl.uint32
-    )
-    b3 = tl.load(kv_ptr + scale_addr + 3 * stride_kvbyte, mask=valid_mask, other=0).to(
-        tl.uint32
-    )
-    scale_u32 = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
-    scale_f32 = scale_u32.to(tl.float32, bitcast=True)  # [BLOCK_KV]
+    scale_ptr = (kv_ptr + scale_addr).to(tl.pointer_type(tl.uint32, 1), bitcast=True)
+    scale_u32 = tl.load(scale_ptr, mask=valid_mask, other=0)
+    scale_f32 = scale_u32.to(tl.float32, bitcast=True)
 
     logit_accum = tl.zeros([BLOCK_KV], dtype=tl.float32)
     offs_d = tl.arange(0, BLOCK_D)
+    q_base = q_ptr + batch_idx * stride_qb + next_n_idx * stride_qn
 
-    for d_tile in tl.static_range(0, NUM_D_TILES):
-        d_offs = d_tile * BLOCK_D + offs_d
-        d_mask = d_offs < dim
+    if NUM_D_TILES == 1:
+        d_mask = offs_d < dim
 
-        kv_byte_ptrs = kv_ptr + kv_base[:, None] + d_offs[None, :] * stride_kvbyte
+        kv_byte_ptrs = kv_ptr + kv_base[:, None] + offs_d[None, :] * stride_kvbyte
         load_mask = valid_mask[:, None] & d_mask[None, :]
         kv_u8 = tl.load(kv_byte_ptrs, mask=load_mask, other=0)
         kv_fp8 = kv_u8.to(tl.float8e4nv, bitcast=True)
         kv_f32 = kv_fp8.to(tl.float32)
 
-        kv_scaled = kv_f32 * scale_f32[:, None]
+        for h_tile in tl.static_range(0, heads, BLOCK_H):
+            offs_h = h_tile + tl.arange(0, BLOCK_H)
+            h_mask = offs_h < heads
 
-        q_base = (
-            q_ptr + batch_idx * stride_qb + next_n_idx * stride_qn + d_offs * stride_qd
-        )
-
-        for h in range(heads):
-            q_vals = tl.load(q_base + h * stride_qh, mask=d_mask, other=0.0).to(
-                tl.float32
+            q_ptrs = q_base + offs_h[:, None] * stride_qh + offs_d[None, :] * stride_qd
+            q_vals = tl.load(
+                q_ptrs, mask=h_mask[:, None] & d_mask[None, :], other=0.0
+            ).to(tl.float32)
+            weights = tl.load(
+                weights_ptr + pid_row * stride_wrow + offs_h * stride_wh,
+                mask=h_mask,
+                other=0.0,
             )
 
-            w = tl.load(weights_ptr + pid_row * stride_wrow + h * stride_wh)
+            q_tile = tl.trans(q_vals)
+            partial_dot = tl.dot(kv_f32, q_tile, out_dtype=tl.float32)
+            partial_dot = partial_dot * scale_f32[:, None]
+            partial_dot = tl.maximum(partial_dot, 0.0)
+            logit_accum += tl.sum(partial_dot * weights[None, :], axis=1)
 
-            partial_dot = tl.sum(kv_scaled * q_vals[None, :], axis=1)
+    else:
+        d_offs0 = offs_d
+        d_mask0 = d_offs0 < dim
+        d_offs1 = BLOCK_D + offs_d
+        d_mask1 = d_offs1 < dim
 
-            if NUM_D_TILES == 1:
-                dot_relu = tl.maximum(partial_dot, 0.0)
-                logit_accum += dot_relu * w
+        kv_byte_ptrs0 = kv_ptr + kv_base[:, None] + d_offs0[None, :] * stride_kvbyte
+        load_mask0 = valid_mask[:, None] & d_mask0[None, :]
+        kv_u80 = tl.load(kv_byte_ptrs0, mask=load_mask0, other=0)
+        kv_fp80 = kv_u80.to(tl.float8e4nv, bitcast=True)
+        kv_f320 = kv_fp80.to(tl.float32)
 
-    if NUM_D_TILES > 1:
-        logit_accum2 = tl.zeros([BLOCK_KV], dtype=tl.float32)
+        kv_byte_ptrs1 = kv_ptr + kv_base[:, None] + d_offs1[None, :] * stride_kvbyte
+        load_mask1 = valid_mask[:, None] & d_mask1[None, :]
+        kv_u81 = tl.load(kv_byte_ptrs1, mask=load_mask1, other=0)
+        kv_fp81 = kv_u81.to(tl.float8e4nv, bitcast=True)
+        kv_f321 = kv_fp81.to(tl.float32)
 
-        for h in range(heads):
-            w = tl.load(weights_ptr + pid_row * stride_wrow + h * stride_wh)
-            dot = tl.zeros([BLOCK_KV], dtype=tl.float32)
+        for h_tile in tl.static_range(0, heads, BLOCK_H):
+            offs_h = h_tile + tl.arange(0, BLOCK_H)
+            h_mask = offs_h < heads
 
-            for d_tile2 in tl.static_range(0, NUM_D_TILES):
-                d_offs2 = d_tile2 * BLOCK_D + offs_d
-                d_mask2 = d_offs2 < dim
+            q_ptrs0 = (
+                q_base + offs_h[:, None] * stride_qh + d_offs0[None, :] * stride_qd
+            )
+            q_vals0 = tl.load(
+                q_ptrs0, mask=h_mask[:, None] & d_mask0[None, :], other=0.0
+            ).to(tl.float32)
 
-                q_ptrs2 = (
-                    q_ptr
-                    + batch_idx * stride_qb
-                    + next_n_idx * stride_qn
-                    + h * stride_qh
-                    + d_offs2 * stride_qd
-                )
-                q_vals2 = tl.load(q_ptrs2, mask=d_mask2, other=0.0).to(tl.float32)
+            q_ptrs1 = (
+                q_base + offs_h[:, None] * stride_qh + d_offs1[None, :] * stride_qd
+            )
+            q_vals1 = tl.load(
+                q_ptrs1, mask=h_mask[:, None] & d_mask1[None, :], other=0.0
+            ).to(tl.float32)
 
-                kv_byte_ptrs2 = (
-                    kv_ptr + kv_base[:, None] + d_offs2[None, :] * stride_kvbyte
-                )
-                load_mask2 = valid_mask[:, None] & d_mask2[None, :]
-                kv_u82 = tl.load(kv_byte_ptrs2, mask=load_mask2, other=0)
-                kv_fp82 = kv_u82.to(tl.float8e4nv, bitcast=True)
-                kv_f322 = kv_fp82.to(tl.float32)
+            weights = tl.load(
+                weights_ptr + pid_row * stride_wrow + offs_h * stride_wh,
+                mask=h_mask,
+                other=0.0,
+            )
 
-                dot += tl.sum(kv_f322 * q_vals2[None, :], axis=1)
+            q_T0 = tl.trans(q_vals0)
+            q_T1 = tl.trans(q_vals1)
 
-            dot = dot * scale_f32
-            dot = tl.maximum(dot, 0.0)
-            logit_accum2 += dot * w
+            partial_dot = tl.dot(kv_f320, q_T0, out_dtype=tl.float32)
+            partial_dot = tl.dot(kv_f321, q_T1, acc=partial_dot, out_dtype=tl.float32)
 
-        logit_accum = logit_accum2
+            partial_dot = partial_dot * scale_f32[:, None]
+            partial_dot = tl.maximum(partial_dot, 0.0)
+            logit_accum += tl.sum(partial_dot * weights[None, :], axis=1)
 
     out_vals = tl.where(valid_mask, logit_accum, float("-inf"))
     out_ptrs = logits_ptr + pid_row * stride_lrow + kv_global_pos * stride_lcol
     out_mask = valid_mask & (kv_global_pos < max_model_len)
     tl.store(out_ptrs, out_vals, mask=out_mask)
+
+
+@triton.jit
+def fill_neg_inf_kernel(
+    out_ptr,
+    n_elements,
+    BLOCK: tl.constexpr,
+):
+    pid = tl.program_id(0)
+    offs = pid * BLOCK + tl.arange(0, BLOCK)
+    mask = offs < n_elements
+    tl.store(out_ptr + offs, float("-inf"), mask=mask)
 
 
 def fp8_paged_mqa_logits(
@@ -240,12 +263,12 @@ def fp8_paged_mqa_logits(
     batch_size, next_n, heads, dim = q.size()
     num_blocks, block_size, one, dim_plus_4 = kv_cache.size()
 
-    assert one == 1, "KV cache must have num_heads=1 (MQA)"
-    assert dim_plus_4 == dim + 4, f"KV dim error: {dim_plus_4} != {dim}+4"
-    assert weights.shape == (batch_size * next_n, heads), "Weights shape mismatch"
-    assert kv_cache.dtype == torch.uint8, "KV cache must be uint8 (packed FP8+scale)"
-    assert context_lens.dtype == torch.int32, "Context lens must be int32"
-    assert block_tables.dtype == torch.int32, "Block tables must be int32"
+    assert one == 1
+    assert dim_plus_4 == dim + 4
+    assert weights.shape == (batch_size * next_n, heads)
+    assert kv_cache.dtype == torch.uint8
+    assert context_lens.dtype == torch.int32
+    assert block_tables.dtype == torch.int32
 
     q_contig = q.contiguous()
     kv_contig = kv_cache.contiguous()
@@ -253,19 +276,24 @@ def fp8_paged_mqa_logits(
     context_lens_contig = context_lens.contiguous()
     block_tables_contig = block_tables.contiguous()
 
-    logits = torch.full(
-        (batch_size * next_n, max_model_len),
-        float("-inf"),
+    total_rows = batch_size * next_n
+
+    logits = torch.empty(
+        (total_rows, max_model_len),
         device=q.device,
         dtype=torch.float32,
     )
+    n_elements = total_rows * max_model_len
+    FILL_BLOCK = 1024
+    fill_grid = (cdiv(n_elements, FILL_BLOCK),)
+    fill_neg_inf_kernel[fill_grid](logits, n_elements, BLOCK=FILL_BLOCK)
 
-    max_context = int(context_lens.max().item())
+    max_context = block_tables_contig.shape[1] * block_size
 
     def grid(meta):
         BLOCK_KV = meta["BLOCK_KV"]
         num_kv_tiles = cdiv(max_context, BLOCK_KV)
-        return (batch_size * next_n, num_kv_tiles)
+        return (total_rows, num_kv_tiles)
 
     fp8_paged_mqa_logits_kernel[grid](
         q_contig,

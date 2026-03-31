@@ -53,7 +53,7 @@ def kv_cache_cast_to_fp8_triton(x: torch.Tensor) -> torch.Tensor:
     )
     out[..., :head_dim] = x_scaled.view(torch.uint8)
 
-    sf_scaled = sf.squeeze(-1).squeeze(-1)  # [num_blocks, block_size]
+    sf_scaled = sf.squeeze(-1).squeeze(-1)
     sf_bytes = sf_scaled.view(torch.int32).view(torch.uint8)
     out[..., head_dim:] = sf_bytes.view(num_blocks, block_size, num_heads, 4)
 
@@ -168,7 +168,9 @@ def test_accuracy_fp8_paged_mqa_logits(clean_logits: bool):
     )
 
     diff = calc_diff(res_out_masked, ref_out_masked)
-    assert diff < 1e-3, f"Triton 与 DeepGEMM 版本差异过大: {diff=} (要求 < 1e-3)"
+    assert (
+        diff < 1e-3
+    ), f"Large discrepancy between Triton and DeepGEMM: {diff=} (expected < 1e-3)"
 
 
 @pytest.mark.fp8
@@ -178,8 +180,26 @@ def test_accuracy_fp8_paged_mqa_logits(clean_logits: bool):
 @pytest.mark.skipif(
     not current_platform.has_device_capability(90), reason="SM90 and SM100 only"
 )
-@pytest.mark.parametrize("batch_size, next_n", [(4, 1), (2, 2)])
-@pytest.mark.parametrize("heads, index_dim", [(32, 128)])
+@pytest.mark.parametrize(
+    "batch_size, next_n",
+    [
+        (1, 1),
+        (2, 1),
+        (4, 1),
+        (8, 1),
+        (16, 1),
+        (32, 1),
+        (2, 2),
+        (4, 2),
+    ],
+)
+@pytest.mark.parametrize(
+    "heads, index_dim",
+    [
+        (16, 64),
+        (32, 128),
+    ],
+)
 def test_accuracy_fp8_paged_mqa_logits_param(batch_size, next_n, heads, index_dim):
     torch.manual_seed(0)
     random.seed(0)
@@ -203,8 +223,12 @@ def test_accuracy_fp8_paged_mqa_logits_param(batch_size, next_n, heads, index_di
     )
 
     context_lens = torch.randint(
-        int(0.8 * avg_kv), int(1.2 * avg_kv), (batch_size,), device=flag_gems.device
-    ).to(torch.int32)
+        int(0.8 * avg_kv),
+        int(1.2 * avg_kv),
+        (batch_size,),
+        device=flag_gems.device,
+        dtype=torch.int32,
+    )
     max_num_blocks_per_seq = (context_lens.max().item() + blocksize - 1) // blocksize
     block_tables = torch.zeros(
         (batch_size, max_num_blocks_per_seq), device=flag_gems.device, dtype=torch.int32
@@ -265,4 +289,6 @@ def test_accuracy_fp8_paged_mqa_logits_param(batch_size, next_n, heads, index_di
     )
 
     diff = calc_diff(res_out_masked, ref_out_masked)
-    assert diff < 1e-3, f"Triton 与 DeepGEMM 版本差异过大: {diff=} (要求 < 1e-3)"
+    assert (
+        diff < 1e-3
+    ), f"Large discrepancy between Triton and DeepGEMM: {diff=} (expected < 1e-3)"

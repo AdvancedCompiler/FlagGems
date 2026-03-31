@@ -80,7 +80,7 @@ def kv_cache_cast_to_fp8_triton(x: torch.Tensor) -> torch.Tensor:
 def _build_case(
     batch_size, next_n, heads, head_dim, avg_kv, blocksize, q_dtype, max_model_len=4096
 ):
-    num_blocks = max_model_len * 2
+    num_blocks = max_model_len * 20
 
     q = torch.randn(
         (batch_size, next_n, heads, head_dim),
