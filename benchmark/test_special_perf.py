@@ -1,10 +1,18 @@
 import random
+from typing import Generator
 
 import pytest
 import torch
+import triton
 
 import flag_gems
-from benchmark.attri_util import BOOL_DTYPES, FLOAT_DTYPES, INT_DTYPES, BenchLevel
+from benchmark.attri_util import (
+    BOOL_DTYPES,
+    COMPLEX_DTYPES,
+    FLOAT_DTYPES,
+    INT_DTYPES,
+    BenchLevel,
+)
 from benchmark.performance_utils import (
     Benchmark,
     Config,
@@ -1024,6 +1032,103 @@ def test_perf_per_token_group_quant_fp8():
     bench.run()
 
 
+@pytest.mark.conj_physical
+def test_perf_conj_physical():
+    def conj_physical_input_fn(shape, dtype, device):
+        if dtype.is_complex:
+            float_dtype = torch.float32 if dtype == torch.complex64 else torch.float64
+            real = torch.randn(shape, dtype=float_dtype, device=device)
+            imag = torch.randn(shape, dtype=float_dtype, device=device)
+            input_tensor = torch.complex(real, imag).to(dtype)
+        elif dtype.is_floating_point:
+            input_tensor = torch.randn(shape, dtype=dtype, device=device)
+        else:
+            input_tensor = torch.randn(shape, device=device).to(dtype)
+        yield (input_tensor,)
+
+    def torch_conj_physical(input):
+        return torch.conj_physical(input)
+
+    def gems_wrapper(input):
+        return flag_gems.conj_physical(input)
+
+    class Conj_physicalBenchmark(GenericBenchmarkExcluse3D):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+
+        def set_shapes(self, shape_file_path=None):
+            conj_physical_shapes = [
+                (256,),
+                (2048, 2048),
+                (128, 512, 256),
+                (32, 64),
+                (512, 1024),
+                (2, 3, 4),
+            ]
+            self.shapes = conj_physical_shapes
+
+        def set_more_shapes(self):
+            return None
+
+    dtypes = FLOAT_DTYPES + INT_DTYPES + COMPLEX_DTYPES
+    bench = Conj_physicalBenchmark(
+        input_fn=conj_physical_input_fn,
+        op_name="conj_physical",
+        torch_op=torch_conj_physical,
+        dtypes=dtypes,
+    )
+    bench.set_gems(flag_gems.conj_physical)
+    bench.run()
+
+
+@pytest.mark.reflection_pad2d
+@pytest.mark.parametrize(
+    "shape",
+    [
+        (3, 33, 33),
+        (2, 4, 32, 64),
+        (8, 16, 64, 64),
+        (32, 64, 128, 256),
+        (16, 32, 64, 128),
+    ],
+)
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.bfloat16])
+@pytest.mark.parametrize(
+    "padding",
+    [
+        (1, 1, 1, 1),
+        (2, 3, 2, 3),
+        (3, 5, 3, 5),
+        (0, 4, 0, 4),
+    ],
+)
+def test_reflection_pad2d_benchmark_tensor(shape, dtype, padding):
+    quantiles = [0.5, 0.2, 0.8]
+
+    x = torch.randn(shape, dtype=dtype, device=flag_gems.device)
+    ref_x = x.clone()
+
+    # PyTorch reference implementation
+    ms_torch, _, _ = triton.testing.do_bench(
+        lambda: torch.ops.aten.reflection_pad2d(ref_x, padding),
+        rep=100,
+        quantiles=quantiles,
+    )
+
+    # Triton implementation
+    with flag_gems.use_gems():
+        ms_triton, _, _ = triton.testing.do_bench(
+            lambda: flag_gems.reflection_pad2d(x, padding), rep=100, quantiles=quantiles
+        )
+
+    # Calculate speedup and return result
+    speedup = ms_torch / ms_triton
+
+    print(f"reflection_pad2d {shape} {dtype}:")
+    print(f"  FlagGems: {ms_triton:.3f}ms")
+    print(f"  Speedup: {speedup:.2f}x")
+
+
 @pytest.mark.upsample_bicubic2d
 @pytest.mark.parametrize("align_corners", [False, True])
 def test_perf_upsample_bicubic2d(align_corners):
@@ -1042,6 +1147,67 @@ def test_perf_upsample_bicubic2d(align_corners):
         input_fn=upsample_bicubic2d_input_fn,
         op_name=f"upsample_bicubic2d_align_{align_corners}",
         torch_op=torch._C._nn.upsample_bicubic2d,
+        dtypes=FLOAT_DTYPES,
+    )
+    bench.run()
+
+
+@pytest.mark.reflection_pad1d
+def test_perf_reflection_pad1d():
+    def reflection_pad1d_input_fn(config, dtype, device):
+        shape, padding = config
+        x = torch.randn(shape, dtype=dtype, device=device)
+        yield x, list(padding)
+
+    class ReflectionPad1dBenchmark(Benchmark):
+        def set_shapes(self, shape_file_path=None):
+            self.shapes = [
+                ((3, 33), (1, 1)),
+                ((2, 4, 64), (3, 5)),
+                ((8, 16, 256), (8, 8)),
+                ((32, 64, 2048), (3, 5)),
+            ]
+
+        def set_more_shapes(self):
+            return None
+
+        def get_input_iter(self, cur_dtype):
+            for config in self.shapes:
+                yield from reflection_pad1d_input_fn(config, cur_dtype, self.device)
+
+    bench = ReflectionPad1dBenchmark(
+        op_name="reflection_pad1d",
+        torch_op=torch.ops.aten.reflection_pad1d,
+        dtypes=FLOAT_DTYPES,
+    )
+    bench.run()
+
+
+@pytest.mark.pixel_unshuffle
+def test_perf_pixel_unshuffle():
+    def pixel_unshuffle_input_fn(config, dtype, device):
+        shape, downscale_factor = config
+        x = torch.randn(shape, dtype=dtype, device=device)
+        yield x, downscale_factor
+
+    class PixelUnshuffleBenchmark(Benchmark):
+        def set_shapes(self, shape_file_path=None):
+            self.shapes = [
+                ((1, 3, 8, 8), 2),
+                ((2, 4, 12, 6), 3),
+                ((4, 16, 64, 48), 4),
+            ]
+
+        def set_more_shapes(self):
+            return None
+
+        def get_input_iter(self, cur_dtype):
+            for config in self.shapes:
+                yield from pixel_unshuffle_input_fn(config, cur_dtype, self.device)
+
+    bench = PixelUnshuffleBenchmark(
+        op_name="pixel_unshuffle",
+        torch_op=torch.ops.aten.pixel_unshuffle,
         dtypes=FLOAT_DTYPES,
     )
     bench.run()
@@ -1128,4 +1294,142 @@ def test_perf_lift_fresh_copy():
         torch_op=torch.ops.aten.lift_fresh_copy,
         dtypes=FLOAT_DTYPES,
     )
+    bench.run()
+
+
+@pytest.mark.upsample_nearest_exact1d
+def test_perf__upsample_nearest_exact1d():
+    class UpsampleNearestExact1dBenchmark(Benchmark):
+        def set_shapes(self, shape_file_path=None):
+            self.shapes = [(2, 3, 16), (4, 8, 64), (8, 16, 256), (16, 32, 512)]
+
+        def set_more_shapes(self):
+            return None
+
+        def get_input_iter(self, cur_dtype):
+            for shape in self.shapes:
+                x = torch.randn(shape, dtype=cur_dtype, device=self.device)
+                out_size = [shape[-1] * 2]
+                yield x, out_size, None
+
+    bench = UpsampleNearestExact1dBenchmark(
+        op_name="_upsample_nearest_exact1d",
+        torch_op=torch.ops.aten._upsample_nearest_exact1d,
+        dtypes=FLOAT_DTYPES,
+    )
+    bench.run()
+
+
+@pytest.mark.margin_ranking_loss
+def test_perf_margin_ranking_loss():
+    def margin_ranking_loss_input_fn(shape, dtype, device):
+        inp1 = torch.randn(shape, dtype=dtype, device=device)
+        inp2 = torch.randn(shape, dtype=dtype, device=device)
+        target = (
+            torch.randint(0, 2, shape, device=device, dtype=torch.int8) * 2 - 1
+        ).to(dtype)
+        yield inp1, inp2, target, 0.5, 1
+
+    bench = GenericBenchmark(
+        input_fn=margin_ranking_loss_input_fn,
+        op_name="margin_ranking_loss",
+        torch_op=torch.ops.aten.margin_ranking_loss,
+        dtypes=FLOAT_DTYPES,
+    )
+    bench.run()
+
+
+@pytest.mark.soft_margin_loss
+def test_perf_soft_margin_loss():
+    def soft_margin_loss_input_fn(shape, dtype, device):
+        inp = torch.randn(shape, dtype=dtype, device=device)
+        target = (torch.randint(0, 2, shape, device=device).to(dtype) * 2) - 1
+        yield inp, target
+
+    bench = GenericBenchmark(
+        input_fn=soft_margin_loss_input_fn,
+        op_name="soft_margin_loss",
+        torch_op=torch.ops.aten.soft_margin_loss,
+        dtypes=FLOAT_DTYPES,
+    )
+    bench.run()
+
+
+class SafeSoftmaxBenchmark(Benchmark):
+    def get_input_iter(self, cur_dtype) -> Generator:
+        for shape in self.shapes:
+            inp = generate_tensor_input(shape, cur_dtype, self.device)
+            yield inp, -1, None
+
+
+@pytest.mark.safe_softmax
+def test_perf__safe_softmax():
+    bench = SafeSoftmaxBenchmark(
+        op_name="_safe_softmax",
+        torch_op=torch.ops.aten._safe_softmax,
+        dtypes=FLOAT_DTYPES,
+    )
+    bench.run()
+
+
+class TCopyBenchmark(Benchmark):
+    def get_input_iter(self, cur_dtype) -> Generator:
+        for shape in self.shapes:
+            if len(shape) == 2:
+                inp = generate_tensor_input(shape, cur_dtype, self.device)
+                yield inp,
+
+
+@pytest.mark.t_copy
+def test_perf_t_copy():
+    bench = TCopyBenchmark(
+        op_name="t_copy",
+        torch_op=torch.ops.aten.t_copy,
+        dtypes=FLOAT_DTYPES,
+    )
+    bench.run()
+
+
+class SelectBackwardBenchmark(Benchmark):
+    """
+    Benchmark for select_backward operator.
+    """
+
+    def set_more_shapes(self):
+        special_shapes_2d = [(1024, 2**i) for i in range(0, 20, 4)]
+        sp_shapes_3d = [(64, 64, 2**i) for i in range(0, 15, 4)]
+        return special_shapes_2d + sp_shapes_3d
+
+    def get_input_iter(self, cur_dtype):
+        for shape in self.shapes:
+            x = generate_tensor_input(shape, cur_dtype, self.device)
+            ndim = len(shape)
+
+            dim = 1 if ndim > 1 else 0
+            actual_dim = dim if dim >= 0 else dim + ndim
+
+            index = shape[actual_dim] // 2
+
+            y = torch.select(x, actual_dim, index)
+            grad = torch.randn_like(y)
+
+            yield grad, shape, actual_dim, index
+
+    def get_tflops(self, op, *args, **kwargs):
+        grad, shape, _, _ = args
+        return grad.numel()
+
+
+@pytest.mark.select_backward
+@pytest.mark.parametrize(
+    "dtype",
+    FLOAT_DTYPES,
+)
+def test_select_backward_perf(dtype):
+    bench = SelectBackwardBenchmark(
+        op_name="select_backward",
+        torch_op=torch.ops.aten.select_backward,
+        dtypes=[dtype],
+    )
+
     bench.run()
