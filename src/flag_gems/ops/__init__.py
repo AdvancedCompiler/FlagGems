@@ -15,6 +15,7 @@ from flag_gems.ops.amax import amax
 from flag_gems.ops.angle import angle
 from flag_gems.ops.any import any, any_dim, any_dims
 from flag_gems.ops.arange import arange, arange_start
+from flag_gems.ops.arcsinh import arcsinh, arcsinh_out
 from flag_gems.ops.argmax import argmax
 from flag_gems.ops.argmin import argmin
 from flag_gems.ops.atan import atan, atan_
@@ -72,6 +73,7 @@ from flag_gems.ops.cumsum import cumsum, cumsum_out, normed_cumsum
 from flag_gems.ops.diag import diag
 from flag_gems.ops.diag_embed import diag_embed
 from flag_gems.ops.diagonal import diagonal_backward
+from flag_gems.ops.digamma_ import digamma_
 from flag_gems.ops.div import (
     div_mode,
     div_mode_,
@@ -104,6 +106,7 @@ from flag_gems.ops.fill import (
     fill_tensor_out,
 )
 from flag_gems.ops.flip import flip
+from flag_gems.ops.fmin import fmin, fmin_out
 from flag_gems.ops.fp8_mqa_logits import fp8_mqa_logits
 from flag_gems.ops.full import full
 from flag_gems.ops.full_like import full_like
@@ -203,6 +206,7 @@ from flag_gems.ops.randn import randn
 from flag_gems.ops.randn_like import randn_like
 from flag_gems.ops.randperm import randperm
 from flag_gems.ops.reciprocal import reciprocal, reciprocal_
+from flag_gems.ops.reflection_pad2d import reflection_pad2d, reflection_pad2d_out
 from flag_gems.ops.relu import relu, relu_
 from flag_gems.ops.relu6 import relu6
 from flag_gems.ops.repeat import repeat
@@ -222,6 +226,7 @@ from flag_gems.ops.scaled_softmax import scaled_softmax_backward, scaled_softmax
 from flag_gems.ops.scatter import scatter, scatter_
 from flag_gems.ops.scatter_add_ import scatter_add_
 from flag_gems.ops.select_scatter import select_scatter
+from flag_gems.ops.selu_ import selu_
 from flag_gems.ops.sgn_ import sgn_
 from flag_gems.ops.sigmoid import sigmoid, sigmoid_, sigmoid_backward
 from flag_gems.ops.silu import silu, silu_, silu_backward
@@ -237,6 +242,7 @@ from flag_gems.ops.stack import stack
 from flag_gems.ops.std import std
 from flag_gems.ops.sub import sub, sub_
 from flag_gems.ops.sum import sum, sum_dim, sum_dim_out, sum_out
+from flag_gems.ops.t_copy import t_copy, t_copy_out
 from flag_gems.ops.tan import tan, tan_
 from flag_gems.ops.tanh import tanh, tanh_, tanh_backward
 from flag_gems.ops.threshold import threshold, threshold_backward
@@ -244,6 +250,7 @@ from flag_gems.ops.tile import tile
 from flag_gems.ops.to import to_copy
 from flag_gems.ops.topk import topk
 from flag_gems.ops.trace import trace
+from flag_gems.ops.tril import tril, tril_out
 from flag_gems.ops.triu import triu, triu_
 from flag_gems.ops.unfold_backward import unfold_backward
 from flag_gems.ops.uniform import uniform_
@@ -258,6 +265,7 @@ from flag_gems.ops.var_mean import var_mean
 from flag_gems.ops.vdot import vdot
 from flag_gems.ops.vector_norm import vector_norm
 from flag_gems.ops.vstack import vstack
+from flag_gems.ops.w8a8_block_fp8_matmul import w8a8_block_fp8_matmul
 from flag_gems.ops.weightnorm import (
     weight_norm_interface,
     weight_norm_interface_backward,
@@ -301,6 +309,8 @@ __all__ = [
     "any_dims",
     "arange",
     "arange_start",
+    "arcsinh",
+    "arcsinh_out",
     "argmax",
     "argmin",
     "atan",
@@ -355,6 +365,7 @@ __all__ = [
     "diag",
     "diag_embed",
     "diagonal_backward",
+    "digamma_",
     "div_mode",
     "div_mode_",
     "dot",
@@ -391,6 +402,8 @@ __all__ = [
     "flip",
     "floor_divide",
     "floor_divide_",
+    "fmin",
+    "fmin_out",
     "full",
     "full_like",
     "gather",
@@ -513,6 +526,8 @@ __all__ = [
     "randperm",
     "reciprocal",
     "reciprocal_",
+    "reflection_pad2d",
+    "reflection_pad2d_out",
     "relu",
     "relu_",
     "relu6",
@@ -542,6 +557,7 @@ __all__ = [
     "scatter_",
     "scatter_add_",
     "select_scatter",
+    "selu_",
     "sgn_",
     "sigmoid",
     "sigmoid_",
@@ -571,6 +587,8 @@ __all__ = [
     "sum_out",
     "ScaleDotProductAttention",
     "SUPPORTED_FP8_DTYPE",
+    "t_copy",
+    "t_copy_out",
     "tan",
     "tan_",
     "tanh",
@@ -582,6 +600,8 @@ __all__ = [
     "to_copy",
     "topk",
     "trace",
+    "tril",
+    "tril_out",
     "triu",
     "triu_",
     "true_divide",
@@ -598,6 +618,7 @@ __all__ = [
     "vdot",
     "vector_norm",
     "vstack",
+    "w8a8_block_fp8_matmul",
     "weight_norm_interface",
     "weight_norm_interface_backward",
     "where_scalar_other",

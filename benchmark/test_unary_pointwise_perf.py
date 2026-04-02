@@ -77,6 +77,7 @@ forward_operations = [
     ("tan", torch.tan, FLOAT_DTYPES),
     ("tanh", torch.tanh, FLOAT_DTYPES),
     ("atan", torch.atan, FLOAT_DTYPES),
+    ("arcsinh", torch.arcsinh, FLOAT_DTYPES),
     ("acos", torch.acos, FLOAT_DTYPES),
     # Bitwise operations
     ("bitwise_not", torch.bitwise_not, INT_DTYPES),
@@ -128,6 +129,7 @@ forward_inplace_operations = [
     ("gelu_", torch.ops.aten.gelu_.default, FLOAT_DTYPES),
     ("hardswish_", torch.ops.aten.hardswish_, FLOAT_DTYPES),
     ("relu_", torch.relu_, FLOAT_DTYPES),
+    ("selu_", torch.ops.aten.selu_, FLOAT_DTYPES),
     ("sigmoid_", torch.sigmoid_, FLOAT_DTYPES),
     ("sgn_", lambda a: a.sgn_(), FLOAT_DTYPES),
     ("silu_", lambda a: torch.nn.functional.silu(a, inplace=True), FLOAT_DTYPES),
@@ -139,6 +141,7 @@ forward_inplace_operations = [
     ("tanh_", torch.tanh_, FLOAT_DTYPES),
     ("atan_", torch.atan_, FLOAT_DTYPES),
     ("i0_", torch.Tensor.i0_, FLOAT_DTYPES),
+    ("digamma_", lambda a: a.digamma_(), FLOAT_DTYPES),
     # Bitwise operations
     ("bitwise_not_", lambda a: a.bitwise_not_(), INT_DTYPES),
 ]
