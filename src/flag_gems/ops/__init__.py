@@ -104,6 +104,7 @@ from flag_gems.ops.exp2 import exp2, exp2_
 from flag_gems.ops.exponential_ import exponential_
 from flag_gems.ops.eye import eye
 from flag_gems.ops.eye_m import eye_m
+from flag_gems.ops.fft import fft
 from flag_gems.ops.fill import (
     fill_scalar,
     fill_scalar_,
@@ -428,6 +429,7 @@ __all__ = [
     "flash_attention_forward",
     "flash_attn_varlen_func",
     "flip",
+    "fft",
     "floor_",
     "floor_divide",
     "floor_divide_",

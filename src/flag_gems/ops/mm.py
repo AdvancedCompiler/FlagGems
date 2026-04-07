@@ -10,38 +10,17 @@ from flag_gems.runtime import torch_device_fn
 from flag_gems.utils import libentry, libtuner
 from flag_gems.utils import triton_lang_extension as tle
 from flag_gems.utils.device_info import get_device_capability, get_sm_count
+from flag_gems.utils.triton_version_utils import (  # noqa: F401
+    HAS_TLE,
+    _triton_version_at_least,
+)
 
+if HAS_TLE:
+    import triton.experimental.tle.language as tle_exp
 
-def _triton_version_at_least(major: int, minor: int, patch: int = 0) -> bool:
-    version = str(getattr(triton, "__version__", "0.0.0")).split("+", 1)[0]
-    parts = version.split(".")
-    parsed = []
-    for part in parts[:3]:
-        digits = []
-        for ch in part:
-            if ch.isdigit():
-                digits.append(ch)
-            else:
-                break
-        parsed.append(int("".join(digits)) if digits else 0)
-    while len(parsed) < 3:
-        parsed.append(0)
-    return tuple(parsed) >= (major, minor, patch)
-
-
-if _triton_version_at_least(3, 6, 0):
-    try:
-        import triton.experimental.tle.language as tle_exp
-
-        HAS_TLE = True
-        BLOCK_CLUSTER_MESH = tle_exp.device_mesh({"block_cluster": [("cluster_x", 2)]})
-    except ImportError:
-        tle_exp = None
-        HAS_TLE = False
-        BLOCK_CLUSTER_MESH = None
+    BLOCK_CLUSTER_MESH = tle_exp.device_mesh({"block_cluster": [("cluster_x", 2)]})
 else:
     tle_exp = None
-    HAS_TLE = False
     BLOCK_CLUSTER_MESH = None
 
 CACHE_USAGE_THRESHOLD = 0.8
@@ -263,7 +242,9 @@ if HAS_TLE:
                     + (next_k0 + offs_k)[None, :] * stride_ak
                 )
                 if USE_MASK:
-                    a_mask_tile = (offs_m[:, None] < M) & ((next_k0 + offs_k)[None, :] < K)
+                    a_mask_tile = (offs_m[:, None] < M) & (
+                        (next_k0 + offs_k)[None, :] < K
+                    )
                     a_tile = tl.load(a_ptrs, mask=a_mask_tile, other=0.0)
                 else:
                     a_tile = tl.load(a_ptrs)
@@ -497,4 +478,3 @@ def mm_out(a, b, *, out):
         print("走了tle分支")
         return cluster_remote_mm(a, b, out, M, N, K)
     return general_mm(a, b, out, M, N, K)
-

@@ -4,35 +4,12 @@ import torch
 import triton
 import triton.language as tl
 
+from flag_gems.utils.triton_version_utils import HAS_TLE
 
-def _triton_version_at_least(major: int, minor: int, patch: int = 0) -> bool:
-    version = str(getattr(triton, "__version__", "0.0.0")).split("+", 1)[0]
-    parts = version.split(".")
-    parsed = []
-    for part in parts[:3]:
-        digits = []
-        for ch in part:
-            if ch.isdigit():
-                digits.append(ch)
-            else:
-                break
-        parsed.append(int("".join(digits)) if digits else 0)
-    while len(parsed) < 3:
-        parsed.append(0)
-    return tuple(parsed) >= (major, minor, patch)
-
-
-if _triton_version_at_least(3, 6, 0):
-    try:
-        import triton.experimental.tle.language as tle
-
-        HAS_TLE = True
-    except ImportError:
-        tle = None
-        HAS_TLE = False
+if HAS_TLE:
+    import triton.experimental.tle.language as tle
 else:
     tle = None
-    HAS_TLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -269,13 +246,17 @@ if HAS_TLE:
                 mask_ids = (kv_ids <= max_col) & (kv_ids >= 0)
 
                 kv_ptr = (
-                    kv_base + offs_d[:, None] * stride_kvd + kv_ids[None, :] * stride_kvn
+                    kv_base
+                    + offs_d[:, None] * stride_kvd
+                    + kv_ids[None, :] * stride_kvn
                 )
                 kv_msk = mask_d[:, None] & mask_ids[None, :]
                 kv_blk = tle.load(kv_ptr, kv_msk, other=0.0, is_async=True)
 
                 tkv_ptr = (
-                    tkv_base + offs_td[:, None] * stride_kvd + kv_ids[None, :] * stride_kvn
+                    tkv_base
+                    + offs_td[:, None] * stride_kvd
+                    + kv_ids[None, :] * stride_kvn
                 )
                 tkv_msk = mask_td[:, None] & mask_ids[None, :]
                 tkv_blk = tle.load(tkv_ptr, tkv_msk, other=0.0, is_async=False)
@@ -292,9 +273,7 @@ if HAS_TLE:
                 sum_exp = sum_exp * alpha + sum_qk
                 acc = acc * alpha[:, None]
                 exp_qk = exp_qk.to(tl.bfloat16)
-                acc = tl.dot(
-                    exp_qk, tl.trans(kv_blk), acc, out_dtype=tl.float32
-                )
+                acc = tl.dot(exp_qk, tl.trans(kv_blk), acc, out_dtype=tl.float32)
 
                 max_prev = new_max
 
@@ -380,4 +359,3 @@ def triton_sparse_mla_fwd_interface(
     else:
         triton_sparse_mla_fwd[grid](*kernel_args)
     return output, lse
-

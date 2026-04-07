@@ -17,36 +17,12 @@ from flag_gems.runtime import torch_device_fn
 from flag_gems.utils import libentry
 from flag_gems.utils import triton_lang_extension as tle
 from flag_gems.utils.limits import get_dtype_max, get_dtype_min
+from flag_gems.utils.triton_version_utils import HAS_TLE
 
-
-def _triton_version_at_least(major: int, minor: int, patch: int = 0) -> bool:
-    version = str(getattr(triton, "__version__", "0.0.0")).split("+", 1)[0]
-    parts = version.split(".")
-    parsed = []
-    for part in parts[:3]:
-        digits = []
-        for ch in part:
-            if ch.isdigit():
-                digits.append(ch)
-            else:
-                break
-        parsed.append(int("".join(digits)) if digits else 0)
-    while len(parsed) < 3:
-        parsed.append(0)
-    return tuple(parsed) >= (major, minor, patch)
-
-
-if _triton_version_at_least(3, 6, 0):
-    try:
-        import triton.experimental.tle.language as tle_gpu
-
-        HAS_TLE = True
-    except ImportError:
-        tle_gpu = None
-        HAS_TLE = False
+if HAS_TLE:
+    import triton.experimental.tle.language as tle_gpu
 else:
     tle_gpu = None
-    HAS_TLE = False
 
 logger = logging.getLogger(__name__)
 _MIN_FLOAT32_VAL = tl.constexpr(torch.finfo(torch.float32).min)
@@ -598,4 +574,3 @@ def topk(x, k, dim=-1, largest=True, sorted=True):
         )
 
     return (stage2_out, stage2_out_idx)
-

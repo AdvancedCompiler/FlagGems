@@ -2684,3 +2684,31 @@ def test_accuracy_select_backward_small_and_edge(dtype):
         )
 
     gems_assert_close(res_out, ref_out, dtype)
+
+
+# FFT sizes must be power-of-two <= 1024
+FFT_N_LIST = [64, 128, 256, 512, 1024] if not QUICK_MODE else [256]
+FFT_M_LIST = [128, 256] if not QUICK_MODE else [128]
+FFT_DTYPE_LIST = [torch.float32, torch.float16, torch.bfloat16]
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+@pytest.mark.fft
+@pytest.mark.parametrize("M", FFT_M_LIST)
+@pytest.mark.parametrize("N", FFT_N_LIST)
+@pytest.mark.parametrize("dtype", FFT_DTYPE_LIST)
+@pytest.mark.parametrize("complex_input", [True, False])
+def test_accuracy_fft(M, N, dtype, complex_input):
+    if complex_input:
+        real = torch.randn((M, N), device=device, dtype=torch.float32)
+        imag = torch.randn((M, N), device=device, dtype=torch.float32)
+        x = torch.complex(real, imag)
+    else:
+        x = torch.randn((M, N), device=device, dtype=dtype)
+
+    ref = torch.fft.fft(x.to(torch.complex64))
+
+    res = flag_gems.ops.fft(x)
+
+    gems_assert_close(res.real, ref.real, torch.float32, atol=1e-3)
+    gems_assert_close(res.imag, ref.imag, torch.float32, atol=1e-3)

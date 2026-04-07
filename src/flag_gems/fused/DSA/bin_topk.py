@@ -2,35 +2,12 @@ import torch
 import triton
 import triton.language as tl
 
+from flag_gems.utils.triton_version_utils import HAS_TLE
 
-def _triton_version_at_least(major: int, minor: int, patch: int = 0) -> bool:
-    version = str(getattr(triton, "__version__", "0.0.0")).split("+", 1)[0]
-    parts = version.split(".")
-    parsed = []
-    for part in parts[:3]:
-        digits = []
-        for ch in part:
-            if ch.isdigit():
-                digits.append(ch)
-            else:
-                break
-        parsed.append(int("".join(digits)) if digits else 0)
-    while len(parsed) < 3:
-        parsed.append(0)
-    return tuple(parsed) >= (major, minor, patch)
-
-
-if _triton_version_at_least(3, 6, 0):
-    try:
-        import triton.experimental.tle.language as tle_gpu
-
-        HAS_TLE = True
-    except ImportError:
-        tle_gpu = None
-        HAS_TLE = False
+if HAS_TLE:
+    import triton.experimental.tle.language as tle_gpu
 else:
     tle_gpu = None
-    HAS_TLE = False
 
 
 @triton.jit
@@ -358,9 +335,7 @@ if HAS_TLE:
         cond = (hist_cum > l_new_topk) & (hist_cum_next <= l_new_topk)
         cand = tl.where(cond, hist_idx.to(tl.int32), -1)
         threshold = tl.max(cand, axis=0)
-        hist_next = tl.max(
-            tl.where(hist_idx == threshold + 1, hist_cum, 0), axis=0
-        )
+        hist_next = tl.max(tl.where(hist_idx == threshold + 1, hist_cum, 0), axis=0)
         l_new_topk = tl.maximum(l_new_topk - hist_next, 0)
 
         num_ptrs = tle_gpu.gpu.local_ptr(
@@ -447,9 +422,7 @@ if HAS_TLE:
             rev_idx = (RADIX - 1) - hist_idx
             hist_rev = tl.load(tle_gpu.gpu.local_ptr(s_histogram, (rev_idx,)))
             hist_cum_rev = tl.cumsum(hist_rev, axis=0)
-            tl.store(
-                tle_gpu.gpu.local_ptr(s_histogram, (rev_idx,)), hist_cum_rev
-            )
+            tl.store(tle_gpu.gpu.local_ptr(s_histogram, (rev_idx,)), hist_cum_rev)
             tl.debug_barrier()
 
             hist_cum = tl.load(hist_ptrs)
@@ -461,9 +434,7 @@ if HAS_TLE:
             cond = (hist_cum > l_new_topk) & (hist_cum_next <= l_new_topk)
             cand = tl.where(cond, hist_idx.to(tl.int32), -1)
             threshold = tl.max(cand, axis=0)
-            hist_next = tl.max(
-                tl.where(hist_idx == threshold + 1, hist_cum, 0), axis=0
-            )
+            hist_next = tl.max(tl.where(hist_idx == threshold + 1, hist_cum, 0), axis=0)
             l_new_topk = tl.maximum(l_new_topk - hist_next, 0)
 
             for t in tl.static_range(NUM_INPUT_TILES):
@@ -599,4 +570,3 @@ def bucket_sort_topk(inputs, starts, ends, topk):
             SMEM_INPUT_SIZE,
         )
     return indices
-
