@@ -19,7 +19,7 @@ def _triton_version_at_least(major: int, minor: int, patch: int = 0) -> bool:
 
 
 HAS_TLE = False
-if _triton_version_at_least(3, 6, 0):
+if _triton_version_at_least(3, 1, 0):
     try:
         import triton.experimental.tle.language as _tle  # noqa: F401
 
