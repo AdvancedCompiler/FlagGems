@@ -8,12 +8,13 @@ import pytest
 import torch
 
 import flag_gems
+from flag_gems.utils.device_info import get_device_capability
 
 from .accuracy_utils import gems_assert_close, to_reference
 from .conftest import QUICK_MODE
 
 try:
-    import vllm
+    import vllm  # noqa: F401
     from vllm.utils.deep_gemm import calc_diff
     from vllm.utils.deep_gemm import (
         fp8_paged_mqa_logits as fp8_paged_mqa_logits_deepgemm,
@@ -35,20 +36,10 @@ except ImportError:
 random.seed(42)
 
 
-try:
-    import vllm  # noqa: 401
-    from vllm.platforms import current_platform
-
-    VLLM_AVAILABLE = True
-except ImportError:
-    VLLM_AVAILABLE = False
-    current_platform = None
-
-
 def is_cuda_available():
     if flag_gems.device != "cuda":
         return False
-    major, minor = torch.cuda.get_device_capability()
+    major, minor = get_device_capability()
     sm_version_num = major * 10 + minor
     return sm_version_num >= 90 and sm_version_num < 100
 
@@ -1743,9 +1734,7 @@ def _build_mask(context_lens, batch_size, next_n, max_model_len, device):
 @pytest.mark.paged_mqa_logits
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA only")
 @pytest.mark.skipif(not DEEPGEMM_AVAILABLE, reason="DeepGEMM not available")
-@pytest.mark.skipif(
-    not current_platform.has_device_capability(90), reason="SM90 and SM100 only"
-)
+@pytest.mark.skipif(not is_cuda_available(), reason="SM90 and SM100 only")
 @pytest.mark.parametrize("clean_logits", [True, False])
 def test_accuracy_fp8_paged_mqa_logits(clean_logits: bool):
     torch.manual_seed(0)
@@ -1848,9 +1837,7 @@ def test_accuracy_fp8_paged_mqa_logits(clean_logits: bool):
 @pytest.mark.paged_mqa_logits
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA only")
 @pytest.mark.skipif(not DEEPGEMM_AVAILABLE, reason="DeepGEMM not available")
-@pytest.mark.skipif(
-    not current_platform.has_device_capability(90), reason="SM90 and SM100 only"
-)
+@pytest.mark.skipif(not is_cuda_available(), reason="SM90 and SM100 only")
 @pytest.mark.parametrize(
     "batch_size, next_n",
     [(1, 1), (2, 1), (4, 1), (8, 1), (16, 1), (32, 1), (2, 2), (4, 2)],
