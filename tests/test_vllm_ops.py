@@ -5,7 +5,6 @@ from typing import Optional
 
 import pytest
 import torch
-from vllm.platforms import current_platform
 
 import flag_gems
 
@@ -37,10 +36,12 @@ random.seed(42)
 
 try:
     import vllm  # noqa: 401
+    from vllm.platforms import current_platform
 
     VLLM_AVAILABLE = True
 except ImportError:
     VLLM_AVAILABLE = False
+    current_platform = None
 
 
 def is_cuda_available():
