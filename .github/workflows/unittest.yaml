@@ -110,7 +110,7 @@ jobs:
     uses: ./.github/workflows/backend-test.yaml
     with:
       vendor: ascend
-      runner_label: ascend_CI
+      runner_label: ascend
       gpu_check_script: tools/gpu_check_ascend.sh
       test_script: tools/run_backend_tests_ascend.sh
     secrets:
@@ -172,6 +172,18 @@ jobs:
       runner_label: tsingmicro
       gpu_check_script: tools/gpu_check_tsingmicro.sh
       test_script: tools/run_backend_tests_tsingmicro.sh
+    secrets:
+      RUNNER_SSH_KEY: ${{ secrets.RUNNER_SSH_KEY }}
+
+  backend-thead:
+    needs: preprocess
+    if: contains(needs.preprocess.outputs.labels, 'vendor/Thead')
+    uses: ./.github/workflows/backend-test.yaml
+    with:
+      vendor: thead
+      runner_label: thead
+      gpu_check_script: tools/gpu_check_thead.sh
+      test_script: tools/run_backend_tests_thead.sh
     secrets:
       RUNNER_SSH_KEY: ${{ secrets.RUNNER_SSH_KEY }}
 
