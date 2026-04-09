@@ -667,7 +667,7 @@ def test_topk(
     ],
 )
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
-def test_topk_3d_lastdim(shape, topk,dtype):
+def test_topk_3d_lastdim(shape, topk, dtype):
     batch_size = int(np.prod(shape[:-1]))
     hiddensize = shape[-1]
 
@@ -680,14 +680,10 @@ def test_topk_3d_lastdim(shape, topk,dtype):
         x_2d[bsz, :] = x_2d[bsz, col_indices]
 
     ref_x = to_reference(x)
-    ref_value, ref_index = torch.topk(
-        ref_x, topk, dim=-1, largest=True, sorted=True
-    )
+    ref_value, ref_index = torch.topk(ref_x, topk, dim=-1, largest=True, sorted=True)
 
     with flag_gems.use_gems():
-        res_value, res_index = torch.topk(
-            x, topk, dim=-1, largest=True, sorted=True
-        )
+        res_value, res_index = torch.topk(x, topk, dim=-1, largest=True, sorted=True)
 
     gems_assert_close(res_value, ref_value, dtype)
     gems_assert_equal(res_index, ref_index)
