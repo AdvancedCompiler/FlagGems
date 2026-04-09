@@ -5,6 +5,7 @@ from typing import Optional
 
 import pytest
 import torch
+from vllm.platforms import current_platform
 
 import flag_gems
 
@@ -13,7 +14,6 @@ from .conftest import QUICK_MODE
 
 try:
     import vllm
-    from vllm.platforms import current_platform
     from vllm.utils.deep_gemm import calc_diff
     from vllm.utils.deep_gemm import (
         fp8_paged_mqa_logits as fp8_paged_mqa_logits_deepgemm,
