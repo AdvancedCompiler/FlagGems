@@ -182,14 +182,36 @@ def test_perf_grouped_topk_sigmoid():
 
 
 def topk_input_fn(shape, dtype, device):
-    x = torch.randn(shape, device=device, dtype=dtype)
-    k = 5 if shape[-1] > 5 else shape[-1]
-    yield {"x": x, "k": k, "dim": -1},
+    if len(shape) == 3:
+        m, n, k = shape
+        x = torch.randn((m, n), device=device, dtype=dtype)
+        yield {"x": x, "k": k, "dim": -1},
+    else:
+        x = torch.randn(shape, device=device, dtype=dtype)
+        k = 5 if shape[-1] > 5 else shape[-1]
+        yield {"x": x, "k": k, "dim": -1},
     # TODO:  Currently only support sorted == True and only support topk in last dimension
     # if Config.bench_level == BenchLevel.COMPREHENSIVE:
     #     k = 5 if shape[0] > 5 else shape[0]
     #     yield {"x": x, "k": k, "dim": 0},
     #     yield {"x": x, "k": k, "dim": -1, "sorted": False},
+
+
+class TopKBenchmark(GenericBenchmark2DOnly):
+    def set_shapes(self, shape_file_path=None):
+        self.shapes = [
+            (64, 64),
+            (4096, 4096),
+            (10000, 256),
+            (10000, 65536),
+            (4, 128),
+            (8, 256),
+            (64, 128, 8),
+            (64, 128, 16),
+            (64, 1024, 32),
+            (64, 8192, 128),
+            (128, 32768, 256),
+        ]
 
 
 def resolve_neg_input_fn(shape, dtype, device):
@@ -228,7 +250,8 @@ special_operations = [
     ],
 )
 def test_special_operations_benchmark(op_name, torch_op, dtypes, input_fn):
-    bench = GenericBenchmarkExcluse1D(
+    bench_cls = TopKBenchmark if op_name == "topk" else GenericBenchmarkExcluse1D
+    bench = bench_cls(
         input_fn=input_fn, op_name=op_name, dtypes=dtypes, torch_op=torch_op
     )
     bench.run()
