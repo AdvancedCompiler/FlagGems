@@ -234,9 +234,18 @@ def resolve_conj_input_fn(shape, dtype, device):
     yield x.conj(),
 
 
+@pytest.mark.topk
+def test_perf_topk():
+    bench = TopKBenchmark(
+        input_fn=topk_input_fn,
+        op_name="topk",
+        dtypes=FLOAT_DTYPES,
+        torch_op=torch.topk,
+    )
+    bench.run()
+
+
 special_operations = [
-    # Sorting Operations
-    ("topk", torch.topk, FLOAT_DTYPES, topk_input_fn),
     # Complex Operations
     ("resolve_neg", torch.resolve_neg, [torch.cfloat], resolve_neg_input_fn),
     ("resolve_conj", torch.resolve_conj, [torch.cfloat], resolve_conj_input_fn),
@@ -257,8 +266,7 @@ special_operations = [
     ],
 )
 def test_special_operations_benchmark(op_name, torch_op, dtypes, input_fn):
-    bench_cls = TopKBenchmark if op_name == "topk" else GenericBenchmarkExcluse1D
-    bench = bench_cls(
+    bench = GenericBenchmarkExcluse1D(
         input_fn=input_fn, op_name=op_name, dtypes=dtypes, torch_op=torch_op
     )
     bench.run()
