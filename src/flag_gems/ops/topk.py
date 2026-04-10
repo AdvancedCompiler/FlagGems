@@ -496,6 +496,7 @@ def topk(x, k, dim=-1, largest=True, sorted=True):
         and descending
         and x.is_cuda
         and x.dtype in (torch.float16, torch.float32, torch.bfloat16)
+        and k >= 8
         and topk_elem_cnt <= 65535
         and triton.next_power_of_2(k) <= 1024
     ):
