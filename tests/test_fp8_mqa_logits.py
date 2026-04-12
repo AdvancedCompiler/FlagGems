@@ -2,19 +2,64 @@ import random
 
 import pytest
 import torch
-from vllm.platforms import current_platform
-from vllm.utils.deep_gemm import fp8_mqa_logits
+
+try:
+    from vllm.utils.deep_gemm import fp8_mqa_logits
+except ImportError:
+    fp8_mqa_logits = None
 
 import flag_gems
 
 from .accuracy_utils import gems_assert_close
 
+
+def is_vllm_available():
+    try:
+        import vllm  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+VLLM_AVAILABLE = is_vllm_available()
+
+
+def is_hopper_available() -> bool:
+    """Check if the current device is NVIDIA Hopper architecture (SM90+)."""
+    if flag_gems.device != "cuda":
+        return False
+    major, minor = torch.cuda.get_device_capability()
+    return (major * 10 + minor) >= 90
+
+
+HOPPER_AVAILABLE = is_hopper_available()
+
+
+def has_deep_gemm() -> bool:
+    """Check if vLLM's DeepGEMM is available."""
+    try:
+        from vllm.utils.import_utils import has_deep_gemm as check_deep_gemm
+
+        return check_deep_gemm()
+    except ImportError:
+        return False
+
+
+DEEPGEMM_AVAILABLE = has_deep_gemm()
+
 device = flag_gems.device
 
 
 @pytest.mark.fp8_mqa_logits
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA only")
-@pytest.mark.skipif(not current_platform.has_device_capability(90), reason="SM90+ only")
+@pytest.mark.skipif(
+    not (torch.cuda.is_available() and HOPPER_AVAILABLE),
+    reason="requires CUDA with Hopper architecture (SM90+)",
+)
+@pytest.mark.skipif(
+    not (VLLM_AVAILABLE and DEEPGEMM_AVAILABLE),
+    reason="requires vLLM with DeepGEMM support",
+)
 @pytest.mark.parametrize("clean_logits", [True, False])
 def test_accuracy_fp8_mqa_logits(clean_logits: bool):
     torch.manual_seed(0)
@@ -59,8 +104,14 @@ def test_accuracy_fp8_mqa_logits(clean_logits: bool):
 
 
 @pytest.mark.fp8_mqa_logits
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA only")
-@pytest.mark.skipif(not current_platform.has_device_capability(90), reason="SM90+ only")
+@pytest.mark.skipif(
+    not (torch.cuda.is_available() and HOPPER_AVAILABLE),
+    reason="requires CUDA with Hopper architecture (SM90+)",
+)
+@pytest.mark.skipif(
+    not (VLLM_AVAILABLE and DEEPGEMM_AVAILABLE),
+    reason="requires vLLM with DeepGEMM support",
+)
 @pytest.mark.parametrize("M, N", [(32, 2048), (32, 4096), (32, 1024)])
 @pytest.mark.parametrize("H, D", [(32, 128)])
 def test_accuracy_fp8_mqa_logits_param(M: int, N: int, H: int, D: int):

@@ -42,7 +42,6 @@ def is_hopper_available() -> bool:
 def has_deep_gemm() -> bool:
     """Check if vLLM's DeepGEMM is available."""
     try:
-        from vllm.utils.deep_gemm import fp8_mqa_logits  # noqa: F401
         from vllm.utils.import_utils import has_deep_gemm as check_deep_gemm
 
         return check_deep_gemm()
