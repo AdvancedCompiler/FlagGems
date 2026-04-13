@@ -1357,45 +1357,6 @@ class FP8PagedMQACompareBenchmark(Benchmark):
             [torch.bfloat16],
         )
         self.set_gems(self._gems_wrapper)
-# ---------------------- flashmla_sparse op test ----------------------
-try:
-    from vllm.v1.attention.ops.flashmla import (
-        flash_mla_sparse_fwd as vllm_flash_mla_sparse_fwd,
-    )
-
-    HAS_VLLM_FLASHMLA_SPARSE = True
-except ImportError:
-    HAS_VLLM_FLASHMLA_SPARSE = False
-
-
-@dataclasses.dataclass
-class Flashmla_Sparse_Test_Param:
-    s_q: int
-    s_kv: int
-    topk: int
-    h_q: int = 128
-    h_kv: int = 1
-    d_qk: int = 512
-    d_v: int = 512
-    is_all_indices_invalid: bool = False
-    num_warmup: int = 5
-    num_runs: int = 10
-    have_attn_sink: bool = False
-    have_topk_length: bool = False
-    dtype: torch.dtype = torch.bfloat16
-    device: torch.device = flag_gems.device
-
-
-# used by make_input_flashmla
-_flashmla_sparse_counter = 0
-
-
-class FlashmlaSparseBenchmark(Benchmark):
-    def __init__(self):
-        super().__init__(
-            "flash_mla_sparse_fwd", vllm_flash_mla_sparse_fwd, [torch.bfloat16]
-        )
-        self.set_gems(flag_gems.flash_mla_sparse_fwd)
 
     def set_shapes(self, shape_file_path=None):
         self.shapes = []
@@ -1498,6 +1459,52 @@ class FlashmlaSparseBenchmark(Benchmark):
 @pytest.mark.fp8_paged_mqa_logits
 def test_perf_fp8_paged_mqa_logits_gems_vs_deepgemm():
     bench = FP8PagedMQACompareBenchmark()
+    bench.run()
+
+
+# ---------------------- flashmla_sparse op test ----------------------
+try:
+    from vllm.v1.attention.ops.flashmla import (
+        flash_mla_sparse_fwd as vllm_flash_mla_sparse_fwd,
+    )
+
+    HAS_VLLM_FLASHMLA_SPARSE = True
+except ImportError:
+    HAS_VLLM_FLASHMLA_SPARSE = False
+
+
+@dataclasses.dataclass
+class Flashmla_Sparse_Test_Param:
+    s_q: int
+    s_kv: int
+    topk: int
+    h_q: int = 128
+    h_kv: int = 1
+    d_qk: int = 512
+    d_v: int = 512
+    is_all_indices_invalid: bool = False
+    num_warmup: int = 5
+    num_runs: int = 10
+    have_attn_sink: bool = False
+    have_topk_length: bool = False
+    dtype: torch.dtype = torch.bfloat16
+    device: torch.device = flag_gems.device
+
+
+# used by make_input_flashmla
+_flashmla_sparse_counter = 0
+
+
+class FlashmlaSparseBenchmark(Benchmark):
+    def __init__(self):
+        super().__init__(
+            "flash_mla_sparse_fwd", vllm_flash_mla_sparse_fwd, [torch.bfloat16]
+        )
+        self.set_gems(flag_gems.flash_mla_sparse_fwd)
+
+    def set_shapes(self, shape_file_path=None):
+        self.shapes = []
+
     def get_input_iter(self, cur_dtype):
         for param in FlashmlaSparseBenchmark.get_performance_test_params_flashmla():
             yield from FlashmlaSparseBenchmark.make_input_flashmla(param)
@@ -1535,17 +1542,9 @@ def test_perf_fp8_paged_mqa_logits_gems_vs_deepgemm():
     def _randperm_batch(
         batch_size: int, perm_range: torch.Tensor, perm_size: int, paddings: List[int]
     ) -> torch.Tensor:
-        """
-        Generate random permutations in batch
-        The return tensor, denoted as `res`, has a shape of [batch_size, perm_size]. `0 <= res[i, :] < perm_range[i]`
-        holds.
-        Values within each row are unique.
-        If, for some `i`, `perm_range[i] < perm_size` holds, then `res[i, :]` contains values in `[0, perm_range[i])`
-        as many as possible, and the rest are filled with `padding`.
-        """
         assert not torch.are_deterministic_algorithms_enabled()
         torch.use_deterministic_algorithms(True)
-        perm_range_max = max(int(torch.max(perm_range).item()), perm_size)
+        perm_range_max = max(int(torch.max(perm_range.item())), perm_size)
         rand = torch.rand(batch_size, perm_range_max, dtype=torch.float32)
         rand[
             torch.arange(0, perm_range_max).broadcast_to(batch_size, perm_range_max)
@@ -1564,7 +1563,6 @@ def test_perf_fp8_paged_mqa_logits_gems_vs_deepgemm():
 
     @staticmethod
     def make_input_flashmla(param: Flashmla_Sparse_Test_Param):
-        """Create input data for sparse MLA operator by referring to the FlashMLA examples"""
         s_q = param.s_q
         s_kv = param.s_kv
         h_q = param.h_q
