@@ -85,6 +85,45 @@ def test_accuracy_amax(shape, dim, keepdim, dtype):
     gems_assert_equal(res_out, ref_out)
 
 
+@pytest.mark.aminmax
+@pytest.mark.parametrize("keepdim, dim, shape", KEEPDIM_DIMS_SHAPE)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_aminmax(shape, dim, keepdim, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=flag_gems.device)
+    ref_inp = to_reference(inp)
+
+    # torch.aminmax only supports single dim, use torch.amin/amax for multi-dim
+    if isinstance(dim, list):
+        ref_min = torch.amin(ref_inp, dim=dim, keepdim=keepdim)
+        ref_max = torch.amax(ref_inp, dim=dim, keepdim=keepdim)
+    else:
+        ref_min, ref_max = torch.aminmax(ref_inp, dim=dim, keepdim=keepdim)
+    with flag_gems.use_gems():
+        if isinstance(dim, list):
+            res_min = torch.amin(inp, dim=dim, keepdim=keepdim)
+            res_max = torch.amax(inp, dim=dim, keepdim=keepdim)
+        else:
+            res_min, res_max = torch.aminmax(inp, dim=dim, keepdim=keepdim)
+
+    gems_assert_equal(res_min, ref_min)
+    gems_assert_equal(res_max, ref_max)
+
+
+@pytest.mark.aminmax
+@pytest.mark.parametrize("shape", REDUCTION_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_aminmax_no_dim(shape, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=flag_gems.device)
+    ref_inp = to_reference(inp)
+
+    ref_min, ref_max = torch.aminmax(ref_inp)
+    with flag_gems.use_gems():
+        res_min, res_max = torch.aminmax(inp)
+
+    gems_assert_equal(res_min, ref_min)
+    gems_assert_equal(res_max, ref_max)
+
+
 EMPTY_SHAPES = [(0, 5), (3, 0, 4), (2, 5, 0), (0,)]
 
 
@@ -1076,6 +1115,16 @@ def test_accuracy_trace(shape, dtype):
 @pytest.mark.parametrize("dim", [0, 1, 2])
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_accuracy_gather(inp_shape, dim, dtype):
+    # Test ndim mismatch raises IndexError (only once to avoid redundant checks)
+    if dim == 0 and dtype == torch.float32:
+        mismatch_inp = torch.randn(inp_shape, dtype=dtype, device=flag_gems.device)
+        mismatch_index = torch.zeros(
+            inp_shape[:2], dtype=torch.long, device=flag_gems.device
+        )
+        with pytest.raises(IndexError):
+            with flag_gems.use_gems():
+                torch.gather(mismatch_inp, 0, mismatch_index)
+
     inp = torch.randn(
         inp_shape, dtype=dtype, device=flag_gems.device, requires_grad=True
     )
@@ -1232,6 +1281,58 @@ def test_accuracy_slice_backward(
         end,
         step,
     )
+
+    gems_assert_equal(res_out, ref_out)
+
+
+@pytest.mark.slice
+@pytest.mark.parametrize("shape", SLICE_BACKWARD_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_slice_backward_oob_end(shape, dtype):
+    # Regression test: end > dim_size caused out-of-bounds write in kernel.
+    device = flag_gems.device
+    dim = 1 % len(shape)
+    dim_size = shape[dim]
+    start = 0
+    end = dim_size + 100  # intentionally out of bounds
+    step = 1
+
+    # grad_output shape matches what PyTorch would produce (clamped slice)
+    valid_shape = list(shape)
+    valid_shape[dim] = dim_size
+    grad_output = torch.randn(valid_shape, dtype=dtype, device=device)
+    ref_grad_output = to_reference(grad_output)
+
+    ref_out = torch.ops.aten.slice_backward(
+        ref_grad_output, shape, dim, start, end, step
+    )
+    res_out = flag_gems.ops.slice_backward(grad_output, shape, dim, start, end, step)
+
+    gems_assert_equal(res_out, ref_out)
+
+
+@pytest.mark.slice
+@pytest.mark.parametrize("shape", SLICE_BACKWARD_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_slice_backward_oob_start(shape, dtype):
+    # Regression test: start > dim_size caused out-of-bounds write in kernel.
+    device = flag_gems.device
+    dim = 1 % len(shape)
+    dim_size = shape[dim]
+    start = dim_size + 50  # intentionally out of bounds
+    end = dim_size + 100
+    step = 1
+
+    # grad_output is empty since clamped slice is empty
+    valid_shape = list(shape)
+    valid_shape[dim] = 0
+    grad_output = torch.randn(valid_shape, dtype=dtype, device=device)
+    ref_grad_output = to_reference(grad_output)
+
+    ref_out = torch.ops.aten.slice_backward(
+        ref_grad_output, shape, dim, start, end, step
+    )
+    res_out = flag_gems.ops.slice_backward(grad_output, shape, dim, start, end, step)
 
     gems_assert_equal(res_out, ref_out)
 
@@ -1538,7 +1639,7 @@ MAXPOOL2D_CONFIGS = [
 ]
 
 
-@pytest.mark.max_pool2d
+@pytest.mark.max_pool2d_with_indices
 @pytest.mark.parametrize(
     "shape, kernel_size, stride, padding, dilation, ceil_mode", MAXPOOL2D_CONFIGS
 )
@@ -2286,6 +2387,45 @@ def test_accuracy_std(shape, dim, correction, keepdim, dtype):
         res_out = torch.std(inp, dim=dim, correction=correction, keepdim=keepdim)
 
     ref_out = torch.std(ref_inp, dim=dim, correction=correction, keepdim=keepdim)
+
+    gems_assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.var
+@pytest.mark.parametrize("shape", REDUCTION_SHAPES)
+@pytest.mark.parametrize("dim", DIMS_LIST + [None])
+@pytest.mark.parametrize("correction", [1] if QUICK_MODE else [0, 1])
+@pytest.mark.parametrize("keepdim", [True] if QUICK_MODE else [True, False])
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_var(shape, dim, correction, keepdim, dtype):
+    inp = torch.randn(shape, dtype=dtype, device=flag_gems.device)
+
+    dims_to_check = []
+    if isinstance(dim, int):
+        dims_to_check = [dim]
+    elif isinstance(dim, (list, tuple)):
+        dims_to_check = dim
+
+    if any(d >= len(shape) or d < -len(shape) for d in dims_to_check):
+        pytest.skip("Dimension out of range for the given shape.")
+
+    if correction == 1:
+        if dim is not None:
+            positive_dims = [d % len(shape) for d in dims_to_check]
+            reduction_size = 1
+            for d in positive_dims:
+                reduction_size *= shape[d]
+            if reduction_size < 2:
+                pytest.skip("Correction=1 requires reduction size of at least 2.")
+        elif inp.numel() < 2:
+            pytest.skip("Correction=1 requires numel >= 2 for global reduction.")
+
+    ref_inp = to_reference(inp)
+
+    with flag_gems.use_gems():
+        res_out = torch.var(inp, dim=dim, correction=correction, keepdim=keepdim)
+
+    ref_out = torch.var(ref_inp, dim=dim, correction=correction, keepdim=keepdim)
 
     gems_assert_close(res_out, ref_out, dtype)
 
