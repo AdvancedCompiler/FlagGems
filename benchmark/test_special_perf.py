@@ -1587,8 +1587,8 @@ def test_perf_fft():
         dtypes=[torch.complex64],
     )
     bench.set_gems(gems_fft)
-    
-    
+
+
 @pytest.mark.unique_consecutive
 def test_unique_consecutive():
     def unique_consecutive_input_fn(shape, dtype, device):
