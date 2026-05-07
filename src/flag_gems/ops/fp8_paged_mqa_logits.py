@@ -2,74 +2,15 @@ import torch
 import triton
 import triton.language as tl
 
+from flag_gems import runtime
+
 
 def cdiv(x: int, y: int) -> int:
     return (x + y - 1) // y
 
 
 @triton.autotune(
-    configs=[
-        triton.Config(
-            {"BLOCK_KV": 64, "BLOCK_D": 128, "NUM_D_TILES": 1, "BLOCK_H": 32},
-            num_warps=8,
-            num_stages=2,
-        ),
-        triton.Config(
-            {"BLOCK_KV": 64, "BLOCK_D": 128, "NUM_D_TILES": 1, "BLOCK_H": 16},
-            num_warps=8,
-            num_stages=2,
-        ),
-        triton.Config(
-            {"BLOCK_KV": 64, "BLOCK_D": 128, "NUM_D_TILES": 1, "BLOCK_H": 8},
-            num_warps=4,
-            num_stages=2,
-        ),
-        triton.Config(
-            {"BLOCK_KV": 128, "BLOCK_D": 128, "NUM_D_TILES": 1, "BLOCK_H": 32},
-            num_warps=8,
-            num_stages=2,
-        ),
-        triton.Config(
-            {"BLOCK_KV": 128, "BLOCK_D": 128, "NUM_D_TILES": 1, "BLOCK_H": 16},
-            num_warps=8,
-            num_stages=2,
-        ),
-        triton.Config(
-            {"BLOCK_KV": 32, "BLOCK_D": 128, "NUM_D_TILES": 1, "BLOCK_H": 32},
-            num_warps=4,
-            num_stages=2,
-        ),
-        triton.Config(
-            {"BLOCK_KV": 64, "BLOCK_D": 64, "NUM_D_TILES": 2, "BLOCK_H": 16},
-            num_warps=8,
-            num_stages=2,
-        ),
-        triton.Config(
-            {"BLOCK_KV": 64, "BLOCK_D": 64, "NUM_D_TILES": 2, "BLOCK_H": 8},
-            num_warps=4,
-            num_stages=2,
-        ),
-        triton.Config(
-            {"BLOCK_KV": 128, "BLOCK_D": 64, "NUM_D_TILES": 2, "BLOCK_H": 16},
-            num_warps=8,
-            num_stages=2,
-        ),
-        triton.Config(
-            {"BLOCK_KV": 64, "BLOCK_D": 64, "NUM_D_TILES": 1, "BLOCK_H": 16},
-            num_warps=4,
-            num_stages=2,
-        ),
-        triton.Config(
-            {"BLOCK_KV": 64, "BLOCK_D": 64, "NUM_D_TILES": 1, "BLOCK_H": 8},
-            num_warps=4,
-            num_stages=2,
-        ),
-        triton.Config(
-            {"BLOCK_KV": 128, "BLOCK_D": 64, "NUM_D_TILES": 1, "BLOCK_H": 16},
-            num_warps=8,
-            num_stages=2,
-        ),
-    ],
+    configs=runtime.get_tuned_config("fp8_paged_mqa_logits"),
     key=["heads", "dim", "block_size"],
 )
 @triton.jit
