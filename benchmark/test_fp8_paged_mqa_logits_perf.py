@@ -3,9 +3,15 @@ from itertools import product
 
 import pytest
 import torch
-from vllm.utils.deep_gemm import fp8_paged_mqa_logits as vllm_fp8_paged_mqa_logits
-from vllm.utils.deep_gemm import get_num_sms, get_paged_mqa_logits_metadata
-from vllm.utils.import_utils import has_deep_gemm
+
+try:
+    from vllm.utils.deep_gemm import fp8_paged_mqa_logits as vllm_fp8_paged_mqa_logits
+    from vllm.utils.deep_gemm import get_num_sms, get_paged_mqa_logits_metadata
+    from vllm.utils.import_utils import has_deep_gemm
+
+    VLLM_AVAILABLE = True
+except ImportError:
+    VLLM_AVAILABLE = False
 
 import flag_gems
 from benchmark.performance_utils import Benchmark
@@ -16,13 +22,6 @@ from flag_gems.ops.fp8_paged_mqa_logits import (
 random.seed(42)
 
 
-def is_vllm_available():
-    try:
-        return True
-    except Exception:
-        return False
-
-
 def is_hopper_available():
     if flag_gems.device != "cuda":
         return False
@@ -30,8 +29,7 @@ def is_hopper_available():
     return (major * 10 + minor) >= 90
 
 
-VLLM_AVAILABLE = is_vllm_available()
-DEEPGEMM_AVAILABLE = has_deep_gemm()
+DEEPGEMM_AVAILABLE = VLLM_AVAILABLE and has_deep_gemm()
 HOPPER_AVAILABLE = is_hopper_available()
 
 

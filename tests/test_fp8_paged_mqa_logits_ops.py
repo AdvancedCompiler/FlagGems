@@ -2,11 +2,18 @@ import random
 
 import pytest
 import torch
-from vllm.platforms import current_platform
-from vllm.utils.deep_gemm import calc_diff
-from vllm.utils.deep_gemm import fp8_paged_mqa_logits as fp8_paged_mqa_logits_deepgemm
-from vllm.utils.deep_gemm import get_num_sms, get_paged_mqa_logits_metadata
-from vllm.utils.import_utils import has_deep_gemm
+
+try:
+    from vllm.platforms import current_platform
+    from vllm.utils.deep_gemm import (
+        fp8_paged_mqa_logits as fp8_paged_mqa_logits_deepgemm,
+    )
+    from vllm.utils.deep_gemm import get_num_sms, get_paged_mqa_logits_metadata
+    from vllm.utils.import_utils import has_deep_gemm
+
+    VLLM_AVAILABLE = True
+except ImportError:
+    VLLM_AVAILABLE = False
 
 import flag_gems
 from flag_gems.ops.fp8_paged_mqa_logits import fp8_paged_mqa_logits
@@ -73,8 +80,8 @@ def _build_mask(context_lens, batch_size, next_n, max_model_len, device):
     )
 
 
-@pytest.mark.fp8
-@pytest.mark.paged_mqa_logits
+@pytest.mark.fp8_paged_mqa_logits
+@pytest.mark.skipif(not VLLM_AVAILABLE, reason="vllm is not installed")
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA only")
 @pytest.mark.skipif(not has_deep_gemm(), reason="DeepGEMM not available")
 @pytest.mark.skipif(
@@ -164,15 +171,13 @@ def test_accuracy_fp8_paged_mqa_logits(clean_logits: bool):
         res_out_masked.dtype,
         equal_nan=True,
         atol=5e-2,
+        rtol=1e-3,
         reduce_dim=1,
     )
 
-    diff = calc_diff(res_out_masked, ref_out_masked)
-    assert diff < 1e-3, f"Triton 与 DeepGEMM 版本差异过大: {diff=} (要求 < 1e-3)"
 
-
-@pytest.mark.fp8
-@pytest.mark.paged_mqa_logits
+@pytest.mark.fp8_paged_mqa_logits
+@pytest.mark.skipif(not VLLM_AVAILABLE, reason="vllm is not installed")
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA only")
 @pytest.mark.skipif(not has_deep_gemm(), reason="DeepGEMM not available")
 @pytest.mark.skipif(
@@ -261,8 +266,6 @@ def test_accuracy_fp8_paged_mqa_logits_param(batch_size, next_n, heads, index_di
         res_out_masked.dtype,
         equal_nan=True,
         atol=5e-2,
+        rtol=1e-3,
         reduce_dim=1,
     )
-
-    diff = calc_diff(res_out_masked, ref_out_masked)
-    assert diff < 1e-3, f"Triton 与 DeepGEMM 版本差异过大: {diff=} (要求 < 1e-3)"
