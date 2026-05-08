@@ -455,7 +455,6 @@ def mm(a, b):
     if streamk_scenario(a, b, M, N, K):
         return streamk_mm(a, b, c, M, N, K, sm_count=sm_count)
     if cluster_remote_mm_scenario(a, b, c, M, N, K):
-        print("走了tle分支")
         return cluster_remote_mm(a, b, c, M, N, K)
     return general_mm(a, b, c, M, N, K)
 
@@ -475,6 +474,5 @@ def mm_out(a, b, *, out):
     if streamk_scenario(a, b, M, N, K):
         return streamk_mm(a, b, out, M, N, K, sm_count=sm_count)
     if cluster_remote_mm_scenario(a, b, out, M, N, K):
-        print("走了tle分支")
         return cluster_remote_mm(a, b, out, M, N, K)
     return general_mm(a, b, out, M, N, K)
