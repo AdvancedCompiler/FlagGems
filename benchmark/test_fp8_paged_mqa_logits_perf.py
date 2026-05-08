@@ -14,10 +14,11 @@ except ImportError:
     VLLM_AVAILABLE = False
 
 import flag_gems
-from benchmark.performance_utils import Benchmark
 from flag_gems.ops.fp8_paged_mqa_logits import (
     fp8_paged_mqa_logits as gems_fp8_paged_mqa_logits,
 )
+
+from .performance_utils import Benchmark
 
 random.seed(42)
 
