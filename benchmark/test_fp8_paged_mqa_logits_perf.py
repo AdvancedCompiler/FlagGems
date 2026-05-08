@@ -18,7 +18,7 @@ from flag_gems.ops.fp8_paged_mqa_logits import (
     fp8_paged_mqa_logits as gems_fp8_paged_mqa_logits,
 )
 
-from .utils import Benchmark
+from . import base
 
 random.seed(42)
 
@@ -140,7 +140,7 @@ def _build_case(
     )
 
 
-class FP8PagedMQACompareBenchmark(Benchmark):
+class FP8PagedMQACompareBenchmark(base.Benchmark):
     def __init__(self):
         super().__init__(
             "fp8_paged_mqa_logits_gems_vs_deepgemm",
