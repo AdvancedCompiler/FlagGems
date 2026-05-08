@@ -12,8 +12,13 @@ try:
     from vllm.utils.import_utils import has_deep_gemm
 
     VLLM_AVAILABLE = True
+    DEEPGEMM_AVAILABLE = has_deep_gemm()
+    SM90_AVAILABLE = current_platform.has_device_capability(90)
+
 except ImportError:
     VLLM_AVAILABLE = False
+    DEEPGEMM_AVAILABLE = False
+    SM90_AVAILABLE = False
 
 import flag_gems
 from flag_gems.ops.fp8_paged_mqa_logits import fp8_paged_mqa_logits
@@ -83,10 +88,8 @@ def _build_mask(context_lens, batch_size, next_n, max_model_len, device):
 @pytest.mark.fp8_paged_mqa_logits
 @pytest.mark.skipif(not VLLM_AVAILABLE, reason="vllm is not installed")
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA only")
-@pytest.mark.skipif(not has_deep_gemm(), reason="DeepGEMM not available")
-@pytest.mark.skipif(
-    not current_platform.has_device_capability(90), reason="SM90 and SM100 only"
-)
+@pytest.mark.skipif(not DEEPGEMM_AVAILABLE, reason="DeepGEMM not available")
+@pytest.mark.skipif(not SM90_AVAILABLE, reason="SM90 and SM100 only")
 @pytest.mark.parametrize("clean_logits", [True, False])
 def test_accuracy_fp8_paged_mqa_logits(clean_logits: bool):
     torch.manual_seed(0)
@@ -179,10 +182,8 @@ def test_accuracy_fp8_paged_mqa_logits(clean_logits: bool):
 @pytest.mark.fp8_paged_mqa_logits
 @pytest.mark.skipif(not VLLM_AVAILABLE, reason="vllm is not installed")
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA only")
-@pytest.mark.skipif(not has_deep_gemm(), reason="DeepGEMM not available")
-@pytest.mark.skipif(
-    not current_platform.has_device_capability(90), reason="SM90 and SM100 only"
-)
+@pytest.mark.skipif(not DEEPGEMM_AVAILABLE, reason="DeepGEMM not available")
+@pytest.mark.skipif(not SM90_AVAILABLE, reason="SM90 and SM100 only")
 @pytest.mark.parametrize("batch_size, next_n", [(4, 1), (2, 2)])
 @pytest.mark.parametrize("heads, index_dim", [(32, 128)])
 def test_accuracy_fp8_paged_mqa_logits_param(batch_size, next_n, heads, index_dim):
