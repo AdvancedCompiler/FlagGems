@@ -76,6 +76,7 @@ from flag_gems.ops.clamp import (
     clamp_tensor_,
 )
 from flag_gems.ops.clip import clip, clip_
+from flag_gems.ops.col2im import col2im
 from flag_gems.ops.concatenate import concatenate
 from flag_gems.ops.conj_physical import conj_physical
 from flag_gems.ops.contiguous import contiguous
@@ -90,6 +91,7 @@ from flag_gems.ops.cosh import cosh, cosh_, cosh_out
 from flag_gems.ops.count_nonzero import count_nonzero
 from flag_gems.ops.cummax import cummax
 from flag_gems.ops.cummin import cummin
+from flag_gems.ops.cumprod import cumprod, cumprod_
 from flag_gems.ops.cumsum import cumsum, cumsum_out, normed_cumsum
 from flag_gems.ops.diag import diag
 from flag_gems.ops.diag_embed import diag_embed
@@ -108,7 +110,6 @@ from flag_gems.ops.div import (
 )
 from flag_gems.ops.dot import dot
 from flag_gems.ops.dropout import dropout, dropout_backward
-from flag_gems.ops.einsum import einsum
 from flag_gems.ops.elu import elu, elu_, elu_backward
 from flag_gems.ops.embedding import embedding, embedding_backward
 from flag_gems.ops.embedding_dense_backward import embedding_dense_backward
@@ -133,6 +134,7 @@ from flag_gems.ops.fill import (
 from flag_gems.ops.flip import flip
 from flag_gems.ops.floor_ import floor_
 from flag_gems.ops.fmin import fmin, fmin_out
+from flag_gems.ops.fmod import fmod_scalar, fmod_scalar_, fmod_tensor, fmod_tensor_
 from flag_gems.ops.fp8_matmul import fp8_matmul
 from flag_gems.ops.full import full
 from flag_gems.ops.full_like import full_like
@@ -450,6 +452,7 @@ __all__ = [
     "ceil_out",
     "celu",
     "celu_",
+    "col2im",
     "clamp",
     "clamp_",
     "clamp_min",
@@ -476,6 +479,8 @@ __all__ = [
     "count_nonzero",
     "cummax",
     "cummin",
+    "cumprod",
+    "cumprod_",
     "cumsum",
     "cumsum_out",
     "conj_physical",
@@ -488,7 +493,6 @@ __all__ = [
     "dot",
     "dropout",
     "dropout_backward",
-    "einsum",
     "elu",
     "elu_",
     "elu_backward",
@@ -529,6 +533,10 @@ __all__ = [
     "floor_divide_",
     "fmin",
     "fmin_out",
+    "fmod_scalar",
+    "fmod_scalar_",
+    "fmod_tensor",
+    "fmod_tensor_",
     "full",
     "full_like",
     "gather",
