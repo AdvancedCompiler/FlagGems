@@ -968,7 +968,11 @@ def fft(x: torch.Tensor) -> torch.Tensor:
                 num_stages=1,
             )
 
-            if log_n % 2 == 0:
+            # Kernel swaps buf_a/buf_b after each stage write.
+            # Total swaps = (log_n + 1) // 2 (1 radix-2 if odd, then radix-4 pairs).
+            # Result lands in buf0 when total_swaps is even, buf1 when odd.
+            total_swaps = (log_n + 1) // 2
+            if total_swaps % 2 == 0:
                 out_real = buf0_real
                 out_imag = buf0_imag
             else:
