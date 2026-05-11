@@ -12,7 +12,7 @@ from flag_gems.runtime import torch_device_fn
 from flag_gems.utils import libentry, libtuner
 from flag_gems.utils import triton_lang_extension as tle
 from flag_gems.utils.device_info import get_device_capability, get_sm_count
-from flag_gems.utils.triton_version_utils import HAS_TLE
+from flag_gems.utils.triton_version_utils import HAS_TLE, HAS_TLE_DEVICE_MESH
 
 logger = logging.getLogger("flag_gems.runtime.backend._nvidia.hopper.ops.mm")
 CACHE_USAGE_THRESHOLD = 0.8
@@ -40,7 +40,7 @@ def _estimate_tma_shared_memory_bytes(block_m, block_n, block_k, num_stages):
     return tile_bytes * num_stages + _SHARED_MEM_SAFETY_MARGIN_BYTES
 
 
-if HAS_TLE:
+if HAS_TLE_DEVICE_MESH:
     import triton.experimental.tle.language as tle_exp
 
     BLOCK_CLUSTER_MESH = tle_exp.device_mesh({"block_cluster": [("cluster_x", 2)]})

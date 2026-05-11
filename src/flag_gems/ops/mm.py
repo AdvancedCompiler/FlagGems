@@ -12,10 +12,11 @@ from flag_gems.utils import triton_lang_extension as tle
 from flag_gems.utils.device_info import get_device_capability, get_sm_count
 from flag_gems.utils.triton_version_utils import (  # noqa: F401
     HAS_TLE,
+    HAS_TLE_DEVICE_MESH,
     _triton_version_at_least,
 )
 
-if HAS_TLE:
+if HAS_TLE_DEVICE_MESH:
     import triton.experimental.tle.language as tle_exp
 
     BLOCK_CLUSTER_MESH = tle_exp.device_mesh({"block_cluster": [("cluster_x", 2)]})
