@@ -16,7 +16,8 @@ import pytest
 import torch
 
 import flag_gems
-from benchmark.performance_utils import Benchmark
+
+from . import base
 
 random.seed(42)
 
@@ -93,7 +94,7 @@ def _build_case(
     return (q_fp8, k_fp8, k_scales, weights, cu_seqlen_ks, cu_seqlen_ke)
 
 
-class FP8MQALogitsCompareBenchmark(Benchmark):
+class FP8MQALogitsCompareBenchmark(base.Benchmark):
     """
     Benchmark comparing FlagGems vs vLLM DeepGEMM for FP8 MQA logits.
 
