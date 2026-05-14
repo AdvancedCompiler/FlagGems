@@ -114,13 +114,16 @@ def causal_conv1d_update_ref_wrapper(
         return causal_conv1d_update_ref(x, conv_state, weight, bias, activation)
     valid_mask = conv_state_indices != pad_slot_id
     valid_indices = conv_state_indices[valid_mask].to(torch.long)
-    return causal_conv1d_update_ref(
+    selected_state = conv_state.index_select(0, valid_indices).clone()
+    out = causal_conv1d_update_ref(
         x[valid_mask],
-        conv_state.index_select(0, valid_indices).clone(),
+        selected_state,
         weight,
         bias,
         activation,
     )
+    conv_state.index_copy_(0, valid_indices, selected_state)
+    return out
 
 
 def causal_conv1d_ref(
@@ -285,15 +288,15 @@ def _make_prefill_input(case, dtype):
     bias = (
         torch.randn((dim,), device=flag_gems.device, dtype=dtype) if has_bias else None
     )
-    conv_states = (
-        torch.randn(
-            (total_entries, width - 1, dim), device=flag_gems.device, dtype=dtype
-        )
-        .transpose(1, 2)
-        .contiguous()
-    )
+    conv_states = torch.randn(
+        (total_entries, width - 1, dim), device=flag_gems.device, dtype=dtype
+    ).transpose(1, 2)
     has_initial_state = torch.randint(
-        0, 2, (padded_batch,), dtype=torch.bool, device=flag_gems.device
+        0,
+        2,
+        (query_start_loc.numel() - 1,),
+        dtype=torch.bool,
+        device=flag_gems.device,
     )
     state_indices = torch.randperm(total_entries, device=flag_gems.device)[:batch].to(
         torch.int32

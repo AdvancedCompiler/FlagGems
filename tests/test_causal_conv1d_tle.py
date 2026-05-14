@@ -313,13 +313,11 @@ def test_causal_conv1d_fn(
     x = torch.randn((dim, seqlen), device=device, dtype=dtype)
     weight = torch.randn((dim, width), device=device, dtype=dtype)
     bias = torch.randn((dim,), device=device, dtype=dtype) if has_bias else None
-    conv_states = (
-        torch.randn((total_entries, width - 1, dim), device=device, dtype=dtype)
-        .transpose(1, 2)
-        .contiguous()
-    )
+    conv_states = torch.randn(
+        (total_entries, width - 1, dim), device=device, dtype=dtype
+    ).transpose(1, 2)
     has_initial_state = torch.randint(
-        0, 2, (padded_batch,), dtype=torch.bool, device=device
+        0, 2, (query_start_loc.numel() - 1,), dtype=torch.bool, device=device
     )
     state_indices = torch.randperm(total_entries, device=device)[:batch].to(torch.int32)
     padded_state_indices = torch.cat(
