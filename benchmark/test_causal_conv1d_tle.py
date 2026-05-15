@@ -1,8 +1,7 @@
-import itertools
-
 import pytest
 import torch
 import torch.nn.functional as F
+from einops import rearrange
 
 import flag_gems
 from flag_gems.utils.triton_version_utils import HAS_TLE
@@ -20,28 +19,15 @@ else:
 
 PAD_SLOT_ID = -1
 
-DECODE_CASES = list(
-    itertools.product(
-        [3, 64],
-        [True, False],
-        [2048 + 16, 4096],
-        [3, 4],
-        [1, 3],
-        [False, True],
-        [True],
-    )
-)
-PREFILL_CASES = list(
-    itertools.product(
-        [4, 10],
-        [True, False],
-        [64, 4096],
-        [8, 249, 4096],
-        [4],
-        [True],
-        [True],
-    )
-)
+DECODE_CASES = [
+    (3, False, 4096, 3, 1, False, True),
+    (64, False, 4096, 3, 1, False, True),
+]
+PREFILL_CASES = [
+    (4, True, 64, 8, 4, True, True),
+    (4, False, 64, 249, 4, True, True),
+    (10, True, 4096, 249, 4, True, True),
+]
 
 
 def _make_query_start_loc(total_tokens: int, padded_batch: int) -> list[int]:
@@ -220,20 +206,12 @@ def _make_decode_input(case, dtype):
     total_entries = 10 * batch_size
     activation = "silu" if silu_activation else None
 
-    x = (
-        torch.randn(
-            (padded_batch_size, seqlen, dim), device=flag_gems.device, dtype=dtype
-        )
-        .transpose(1, 2)
-        .contiguous()
-    )
-    conv_state = (
-        torch.randn(
-            (total_entries, width - 1, dim), device=flag_gems.device, dtype=dtype
-        )
-        .transpose(1, 2)
-        .contiguous()
-    )
+    x = torch.randn(
+        (padded_batch_size, seqlen, dim), device=flag_gems.device, dtype=dtype
+    ).transpose(1, 2)
+    conv_state = torch.randn(
+        (total_entries, width - 1, dim), device=flag_gems.device, dtype=dtype
+    ).transpose(1, 2)
     weight = torch.randn((dim, width), device=flag_gems.device, dtype=dtype)
     bias = (
         torch.randn((dim,), device=flag_gems.device, dtype=dtype) if has_bias else None
@@ -283,7 +261,10 @@ def _make_prefill_input(case, dtype):
         dtype=torch.int32,
         device=flag_gems.device,
     )
-    x = torch.randn((dim, seqlen), device=flag_gems.device, dtype=dtype)
+    x = rearrange(
+        torch.randn(1, seqlen, 4096 + dim + 64, device=flag_gems.device, dtype=dtype),
+        "b s d -> b d s",
+    )[:, 4096 : 4096 + dim, :].squeeze(0)
     weight = torch.randn((dim, width), device=flag_gems.device, dtype=dtype)
     bias = (
         torch.randn((dim,), device=flag_gems.device, dtype=dtype) if has_bias else None
