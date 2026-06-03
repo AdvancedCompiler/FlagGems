@@ -14,7 +14,7 @@ except ImportError:
 
 
 @pytest.mark.reglu
-@pytest.mark.parametrize("shape", REGLU_SHAPES)
+@pytest.mark.parametrize("shape", utils.GLU_SHAPES)
 @pytest.mark.parametrize("dtype", utils.FLOAT_DTYPES)
 @pytest.mark.skipif(not TE_AVAILABLE, reason="transformer engine is not available")
 def test_reglu(shape, dtype):

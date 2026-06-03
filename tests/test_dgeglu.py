@@ -15,7 +15,7 @@ except ImportError:
 
 @pytest.mark.dgeglu
 @pytest.mark.skipif(not TE_AVAILABLE, reason="transformer engine is not available")
-@pytest.mark.parametrize("shape", utils.GELU_SHAPES)
+@pytest.mark.parametrize("shape", utils.GLU_SHAPES)
 @pytest.mark.parametrize("dtype", utils.FLOAT_DTYPES)
 def test_dgeglu(shape, dtype):
 
