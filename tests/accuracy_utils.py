@@ -232,6 +232,12 @@ STACK_DIM_LIST = [-2, -1, 0, 1]
 
 ARANGE_START = [0] if TO_CPU else [0, 1, 3]
 
+GELU_SHAPES = (
+    [(2, 19, 7)]
+    if QUICK_MODE
+    else [(2,), (128, 256), (20, 32, 16), (16, 128, 64, 60), (16, 7, 57, 32, 30)]
+)
+
 
 def to_reference(inp, upcast=False):
     if inp is None:
