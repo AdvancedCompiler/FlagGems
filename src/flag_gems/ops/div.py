@@ -209,6 +209,9 @@ def _int_floordiv(x, y):
 @triton.jit
 def _float_floordiv(x, y):
     # NOTE: fmod's sign is the same as the dividend
+    dtype = tl.float64 if (x.dtype is tl.float64 or y.dtype is tl.float64) else tl.float32
+    x = x.to(dtype)
+    y = y.to(dtype)
     remainder = fmod(x, y)
     imperfect = remainder != 0.0
     different_sign = (x < 0) ^ (y < 0)
