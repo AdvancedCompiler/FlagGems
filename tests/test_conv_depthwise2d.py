@@ -21,7 +21,6 @@ SHAPE_DEPTHWISE = [
 ]
 
 
-@pytest.mark.skip(reason="Issue #3021: This operator currently fails the test.")
 @pytest.mark.conv_depthwise2d
 @pytest.mark.parametrize("shape_input, shape_weight, kernel", SHAPE_DEPTHWISE)
 @pytest.mark.parametrize("stride", [[1, 1], [2, 2]])
@@ -45,15 +44,20 @@ def test_conv_depthwise2d(
         bias_tensor = None
         ref_bias = None
 
-    ref_out = torch.ops.aten._conv_depthwise2d(
-        ref_inp,
-        ref_weight,
-        kernel,
-        ref_bias,
-        stride,
-        padding,
-        dilation,
-    )
+    if utils.TO_CPU:
+        ref_out = torch.nn.functional.conv2d(
+            ref_inp,
+            ref_weight,
+            ref_bias,
+            stride,
+            padding,
+            dilation,
+            groups=ref_inp.shape[1],
+        )
+    else:
+        ref_out = torch.ops.aten._conv_depthwise2d(
+            ref_inp, ref_weight, kernel, ref_bias, stride, padding, dilation
+        )
 
     with flag_gems.use_gems():
         res_out = torch.ops.aten._conv_depthwise2d(
