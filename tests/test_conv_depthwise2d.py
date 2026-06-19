@@ -44,20 +44,15 @@ def test_conv_depthwise2d(
         bias_tensor = None
         ref_bias = None
 
-    if utils.TO_CPU:
-        ref_out = torch.nn.functional.conv2d(
-            ref_inp,
-            ref_weight,
-            ref_bias,
-            stride,
-            padding,
-            dilation,
-            groups=ref_inp.shape[1],
-        )
-    else:
-        ref_out = torch.ops.aten._conv_depthwise2d(
-            ref_inp, ref_weight, kernel, ref_bias, stride, padding, dilation
-        )
+    ref_out = torch.ops.aten._conv_depthwise2d(
+        ref_inp,
+        ref_weight,
+        kernel,
+        ref_bias,
+        stride,
+        padding,
+        dilation,
+    )
 
     with flag_gems.use_gems():
         res_out = torch.ops.aten._conv_depthwise2d(
