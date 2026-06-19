@@ -4,6 +4,7 @@ import torch
 import flag_gems
 
 from . import accuracy_utils as utils
+from . import conftest as cfg
 
 try:
     from transformer_engine.pytorch import cpp_extensions as tex
