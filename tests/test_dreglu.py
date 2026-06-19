@@ -4,7 +4,6 @@ import torch
 import flag_gems
 
 from . import accuracy_utils as utils
-from . import conftest as cfg
 
 try:
     from transformer_engine.pytorch import cpp_extensions as tex
@@ -19,7 +18,6 @@ except ImportError:
 @pytest.mark.parametrize("dtype", utils.FLOAT_DTYPES)
 @pytest.mark.skipif(not TE_AVAILABLE, reason="TransformerEngine is required")
 def test_dreglu(shape, dtype):
-
     input_tensor = torch.randn(shape, dtype=dtype, device=flag_gems.device)
 
     grad_output_shape = list(shape)

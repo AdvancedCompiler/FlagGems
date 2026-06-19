@@ -18,7 +18,6 @@ except ImportError:
 @pytest.mark.parametrize("shape", utils.GLU_SHAPES)
 @pytest.mark.parametrize("dtype", utils.FLOAT_DTYPES)
 def test_dgeglu(shape, dtype):
-
     input_tensor = torch.randn(shape, dtype=dtype, device=flag_gems.device)
 
     grad_output_shape = list(shape)

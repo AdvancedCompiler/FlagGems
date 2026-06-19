@@ -18,7 +18,6 @@ except ImportError:
 @pytest.mark.parametrize("dtype", utils.FLOAT_DTYPES)
 @pytest.mark.skipif(not TE_AVAILABLE, reason="TransformerEngine is required")
 def test_geglu(shape, dtype):
-
     input_tensor = torch.randn(shape, dtype=dtype, device=flag_gems.device)
 
     ref_out = tex.geglu(input_tensor, None)
