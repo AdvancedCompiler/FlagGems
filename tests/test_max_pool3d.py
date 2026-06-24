@@ -31,18 +31,6 @@ MAXPOOL3D_CONFIGS = [
 ]
 
 
-def generate_unique_input(shape, dtype, device):
-    """Generate input tensor with slight perturbation for low precision to reduce ties."""
-    inp = torch.randn(shape, dtype=torch.float32, device=device)
-    if dtype in (torch.float16, torch.bfloat16):
-        # Add a tiny perturbation in fp32 to break most ties before casting to low precision
-        noise = torch.randint(0, 100, shape, device=device, dtype=torch.float32) * 1e-3
-        inp = inp + noise
-    inp = inp.to(dtype)
-    inp.requires_grad_(True)
-    return inp
-
-
 @pytest.mark.max_pool3d_with_indices
 @pytest.mark.parametrize(
     "shape, kernel_size, stride, padding, dilation, ceil_mode", MAXPOOL3D_CONFIGS
@@ -51,7 +39,7 @@ def generate_unique_input(shape, dtype, device):
 def test_max_pool3d_with_indices(
     shape, kernel_size, stride, padding, dilation, ceil_mode, dtype
 ):
-    inp = generate_unique_input(shape, dtype, flag_gems.device)
+    inp = torch.randn(shape, dtype=dtype, device=flag_gems.device, requires_grad=True)
     ref_inp = to_reference(inp, True)
 
     ref_out = torch.nn.functional.max_pool3d(
@@ -84,7 +72,7 @@ def test_max_pool3d_with_indices(
 def test_max_pool3d_backward(
     shape, kernel_size, stride, padding, dilation, ceil_mode, dtype
 ):
-    inp = generate_unique_input(shape, dtype, flag_gems.device)
+    inp = torch.randn(shape, dtype=dtype, device=flag_gems.device, requires_grad=True)
     ref_inp = to_reference(inp, upcast=True)
 
     ref_out = torch.nn.functional.max_pool3d(
